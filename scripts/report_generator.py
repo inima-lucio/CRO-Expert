@@ -1403,34 +1403,51 @@ def page_triangulation(domain, date, ga4, paid):
     eng_chart = svg_bar_chart(engagement_data[:8], metric_key="sessions",
                               color="#0A8A62", label="Engagement Rate por Canal (%)", max_override=100)
 
-    # ── Device comparison table ─────────────────────────────────────────────────
+    # ── Device comparison table — own full-width row, 3 clean columns ──────────
     device_html = ""
     if device:
         mobile_cvr  = device.get("mobile", 0)
         desktop_cvr = device.get("desktop", 1)
         tablet_cvr  = device.get("tablet")
         ratio = mobile_cvr / desktop_cvr if desktop_cvr else 0
-        ratio_cls = "c-red" if ratio < 0.5 else ("c-amber" if ratio < 0.8 else "c-green")
-        ratio_diag = "CRÍTICO: mobile convierte 10x menos — revisar UX mobile urgente" if ratio < 0.3 else \
-                     ("Alerta: gap mobile/desktop significativo" if ratio < 0.5 else \
-                      ("Leve diferencia mobile/desktop" if ratio < 0.8 else "Sin gap significativo"))
-        dev_rows = f"""
-<tr><td style="font-weight:600">Desktop</td>
-  <td><span class="pill c-green">{desktop_cvr:.1f}%</span></td>
-  <td style="color:#8892A4">2.5–4.5%</td>
-  <td>Referencia base</td></tr>
-<tr><td style="font-weight:600">Mobile</td>
-  <td><span class="pill {ratio_cls}">{mobile_cvr:.1f}%</span></td>
-  <td style="color:#8892A4">1.2–2.0%</td>
-  <td style="font-weight:600;color:{'#D63B3B' if ratio < 0.5 else '#D08B00'}">{ratio_diag}</td></tr>"""
+        ratio_cls   = "c-red"   if ratio < 0.5 else ("c-amber" if ratio < 0.8 else "c-green")
+        diag_color  = "#D63B3B" if ratio < 0.5 else ("#D08B00" if ratio < 0.8 else "#0A8A62")
+        diag_bg     = "#FEF0F0" if ratio < 0.5 else ("#FFFBF0" if ratio < 0.8 else "#F0FBF5")
+        diag_icon   = "🔴" if ratio < 0.3 else ("🟠" if ratio < 0.5 else ("🟡" if ratio < 0.8 else "🟢"))
+        ratio_diag  = ("CRÍTICO — mobile convierte casi 10× menos que desktop. Revisar UX mobile urgente."
+                       if ratio < 0.3 else
+                       ("Alerta — gap significativo entre mobile y desktop. Priorizar optimización mobile."
+                        if ratio < 0.5 else
+                        ("Diferencia leve mobile/desktop. Oportunidad de mejora."
+                         if ratio < 0.8 else "Sin gap significativo entre dispositivos.")))
+        dev_rows = (
+            f'<tr><td style="font-weight:700">Desktop</td>'
+            f'<td style="text-align:center"><span class="pill c-green">{desktop_cvr:.1f}%</span></td>'
+            f'<td style="color:#8892A4;text-align:center">2.5–4.5%</td>'
+            f'<td style="color:#4B5675">Referencia base</td></tr>'
+            f'<tr><td style="font-weight:700">Mobile</td>'
+            f'<td style="text-align:center"><span class="pill {ratio_cls}">{mobile_cvr:.1f}%</span></td>'
+            f'<td style="color:#8892A4;text-align:center">1.2–2.0%</td>'
+            f'<td style="color:{diag_color};font-weight:600">Ratio {ratio:.2f}× vs desktop</td></tr>'
+        )
         if tablet_cvr is not None:
-            dev_rows += f'<tr><td style="font-weight:600">Tablet</td><td><span class="pill c-amber">{tablet_cvr:.1f}%</span></td><td style="color:#8892A4">1.5–2.5%</td><td>—</td></tr>'
-        device_html = f"""<div class="chart-box" style="flex:1;min-width:280px">
+            tab_ratio = tablet_cvr / desktop_cvr if desktop_cvr else 0
+            tab_cls   = "c-red" if tab_ratio < 0.5 else ("c-amber" if tab_ratio < 0.8 else "c-green")
+            dev_rows += (
+                f'<tr><td style="font-weight:700">Tablet</td>'
+                f'<td style="text-align:center"><span class="pill {tab_cls}">{tablet_cvr:.1f}%</span></td>'
+                f'<td style="color:#8892A4;text-align:center">1.5–2.5%</td>'
+                f'<td style="color:#4B5675">Ratio {tab_ratio:.2f}× vs desktop</td></tr>'
+            )
+        device_html = f"""<div style="margin-top:20px">
   <div class="chart-title">CVR por Dispositivo — Gap Mobile vs. Desktop</div>
-  <table class="fw-table"><thead><tr><th>Dispositivo</th><th>CVR</th><th>Benchmark</th><th>Diagnóstico</th></tr></thead>
-  <tbody>{dev_rows}</tbody></table>
-  <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:{'#FEF0F0' if ratio < 0.5 else '#FFFBF0'};font-size:11px;color:{'#D63B3B' if ratio < 0.5 else '#D08B00'};font-weight:600">
-    Ratio mobile/desktop: <strong>{ratio:.2f}x</strong> {'🔴' if ratio < 0.5 else '🟡'}
+  <table class="fw-table" style="table-layout:fixed;width:100%">
+    <colgroup><col style="width:20%"><col style="width:15%"><col style="width:18%"><col></colgroup>
+    <thead><tr><th>Dispositivo</th><th style="text-align:center">CVR</th><th style="text-align:center">Benchmark</th><th>Diagnóstico</th></tr></thead>
+    <tbody>{dev_rows}</tbody>
+  </table>
+  <div style="margin-top:10px;padding:10px 14px;border-left:4px solid {diag_color};background:{diag_bg};border-radius:0 8px 8px 0;font-size:12px;color:{diag_color};font-weight:600;line-height:1.5">
+    {diag_icon} <strong>Ratio mobile/desktop: {ratio:.2f}×</strong> — {ratio_diag}
   </div>
 </div>"""
 
@@ -1496,9 +1513,9 @@ def page_triangulation(domain, date, ga4, paid):
     <div class="chart-row">
       {'<div class="chart-box" style="flex:1;min-width:260px"><div class="chart-title">Tráfico por Canal</div>' + sessions_chart + '</div>' if sessions_chart else ''}
       {'<div class="chart-box" style="flex:1;min-width:260px"><div class="chart-title">Engagement por Canal</div>' + eng_chart + '</div>' if eng_chart else ''}
-      {device_html}
     </div>
 
+    {device_html}
     {channels_table}
     {alerts_html}
   </div>

@@ -106,8 +106,47 @@ cro-expert/
 - [Claude Code](https://claude.ai/code) with an active subscription
 - Python 3.10+
 - `playwright`, `requests`, `beautifulsoup4`
-- (Optional) `analytics-mcp` for GA4 data
-- (Optional) Master Metrics MCP for Tiendanube / Meta / Google data
+
+## MCP Configuration (optional but recommended)
+
+Each MCP unlocks a data source in the report. The skill works without them — it falls back to visual/heuristic analysis only.
+
+| MCP | Data | How to install |
+|---|---|---|
+| `analytics-mcp` | Google Analytics 4 — sessions, funnel, bounce rate, CVR | See [analytics-mcp docs](https://github.com/anthropics/mcp-servers) |
+| `Master Metrics MCP` | Tiendanube + Meta Ads + Google Ads (aggregated) | Contact INIMA Interactive |
+| `google-ads-mcp` | Google Ads native — GAQL queries, keywords, Quality Score, Search Terms | See below |
+
+### Install the official Google Ads MCP
+
+Add to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "google-ads": {
+      "command": "pipx",
+      "args": [
+        "run",
+        "--spec",
+        "git+https://github.com/googleads/google-ads-mcp.git",
+        "google-ads-mcp"
+      ],
+      "env": {
+        "GOOGLE_PROJECT_ID": "YOUR_GOOGLE_CLOUD_PROJECT_ID",
+        "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN"
+      }
+    }
+  }
+}
+```
+
+**Get your credentials:**
+1. **Developer Token** → Google Ads → Tools → API Center
+2. **Project ID** → [console.cloud.google.com](https://console.cloud.google.com) → enable Google Ads API
+3. **OAuth** → `gcloud auth application-default login`
+
+> Source: [Official Google Ads MCP](https://github.com/googleads/google-ads-mcp) · [Google Developers Docs](https://developers.google.com/google-ads/api/docs/developer-toolkit/mcp-server)
 
 ---
 

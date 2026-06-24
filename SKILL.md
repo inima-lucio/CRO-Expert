@@ -29,6 +29,46 @@ Examples:
 - `/cro https://mystore.com`
 - `/cro https://mystore.com --pages home,pdp,checkout --pdf`
 
+## MCPs requeridos
+
+Para que el skill funcione con datos reales, el usuario debe tener configurados los siguientes MCPs en Claude Code:
+
+| MCP | Fuente de datos | Requerido |
+|---|---|---|
+| `analytics-mcp` | Google Analytics 4 | Opcional — sin él no hay datos GA4 |
+| `Master Metrics MCP` | Tiendanube, Meta Ads | Opcional — sin él no hay datos de ventas ni paid |
+| `google-ads-mcp` | Google Ads (oficial Google) | Opcional — sin él no hay datos de Google Ads |
+
+### Instalar Google Ads MCP (oficial de Google)
+
+```json
+// Agregar en ~/.claude/claude_desktop_config.json → mcpServers
+{
+  "google-ads": {
+    "command": "pipx",
+    "args": [
+      "run",
+      "--spec",
+      "git+https://github.com/googleads/google-ads-mcp.git",
+      "google-ads-mcp"
+    ],
+    "env": {
+      "GOOGLE_PROJECT_ID": "TU_GOOGLE_CLOUD_PROJECT_ID",
+      "GOOGLE_ADS_DEVELOPER_TOKEN": "TU_DEVELOPER_TOKEN"
+    }
+  }
+}
+```
+
+**Cómo obtener las credenciales:**
+1. **Developer Token** → Google Ads → Herramientas → API Center → Solicitar acceso
+2. **Google Cloud Project ID** → console.cloud.google.com → crear proyecto → habilitar Google Ads API
+3. **OAuth** → se configura automáticamente con Application Default Credentials (`gcloud auth application-default login`)
+
+Si el usuario NO tiene este MCP configurado, saltear la sección de Google Ads en Phase 4C e indicar: *"Google Ads MCP no configurado — instalá `google-ads-mcp` para incluir datos de campañas en el reporte."*
+
+---
+
 ## Execution Protocol
 
 Execute phases **in order**. Never skip a phase. Report progress to the user before each phase.

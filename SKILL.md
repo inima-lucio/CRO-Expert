@@ -10,7 +10,7 @@ metadata:
   category: marketing
   domain: cro-ecommerce
   updated: 2026-06-24
-  tech-stack: GA4-MCP, Master-Metrics-MCP, Meta Ads, Google Ads, Tiendanube, WebFetch, Playwright
+  tech-stack: analytics-mcp, Master-Metrics-MCP, WebFetch, Playwright
 ---
 
 # CRO Expert — E-commerce Conversion Audit
@@ -45,32 +45,51 @@ La última página del reporte se genera automáticamente y contiene:
 5. **KPIs a medir**: CVR actual con meta a 30 días, ATC Rate, Bounce Rate, Abandono TN
 6. **CTA de contacto** con INIMA Interactive
 
-## MCPs requeridos
+## MCPs y fuentes de datos
 
-Hay dos tipos de integración. Verificá cuáles están activos antes de ejecutar el audit:
+Este skill usa **2 MCPs** que cubren distintas fuentes. Antes de ejecutar el audit, verificá cuáles están activos.
 
-### Tipo 1 — Claude Code MCP (configurado en `~/.claude/settings.json`)
+---
 
-| MCP | Fuente | Herramienta Claude | Sin él |
-|---|---|---|---|
-| `analytics-mcp` | Google Analytics 4 | `mcp__analytics-mcp__*` | No hay datos GA4 |
+### MCP 1 — `analytics-mcp` (Google Analytics 4)
 
-**Verificar:** `mcp__analytics-mcp__get_account_summaries` → si devuelve propiedades, está activo.
+**Fuente:** GA4 directo — funnel detallado, dimensiones custom, reportes de conversión.  
+**Herramientas:** `mcp__analytics-mcp__*`  
+**Verificar:** llamar `mcp__analytics-mcp__get_account_summaries` — si devuelve propiedades, está activo.  
+**Si falla con `invalid_grant`:** el OAuth expiró — el usuario debe re-autenticar analytics-mcp.  
+**Fallback:** si no responde, usar Master Metrics `source: "google_analytics"` para GA4 básico.
 
-### Tipo 2 — claude.ai native integrations (habilitadas en claude.ai → Settings → Integrations)
+---
 
-| Integración | Fuente | Herramienta Claude | Sin ella |
-|---|---|---|---|
-| `Master Metrics` | Tiendanube + Meta Ads + Google Ads | `mcp__claude_ai_Master_Metrics__*` | No hay datos de ventas ni paid |
-| `META Ads` | Meta Ads (auth nativa) | `mcp__claude_ai_META_Ads__*` | Usá solo Master Metrics para Meta |
+### MCP 2 — `Master Metrics` (hub multi-fuente)
 
-**Verificar:** `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "tiendanube"` → si devuelve tiendas, está activo.
+**Herramientas:** `mcp__claude_ai_Master_Metrics__*`  
+**Verificar:** llamar `mcp__claude_ai_Master_Metrics__get_available_sources` — devuelve las fuentes conectadas.
 
-### Si los MCPs no están disponibles
+Master Metrics es un hub que agrega múltiples fuentes en una sola API. Las fuentes **no son fijas** — varían por usuario. Antes de asumir qué datos hay disponibles, verificá:
 
-- Si `analytics-mcp` no responde → saltear Phase 4 completa e indicar al usuario
-- Si `Master Metrics` no responde → saltear Phase 4B, 4C e indicar al usuario
-- El reporte se genera igual con análisis visual + heurístico de todas las páginas
+```
+mcp__claude_ai_Master_Metrics__get_available_sources
+```
+
+**Fuentes comunes que pueden estar disponibles:**
+
+| source | Datos | Para quién |
+|---|---|---|
+| `google` | Google Ads — spend, ROAS, CPA, CVR por campaña | Cualquier anunciante |
+| `google_analytics` | GA4 — sessions, CVR, bounce (datos básicos) | Cualquiera con GA4 |
+| `meta` | Meta Ads — Facebook + Instagram, ROAS, CPA, funnel paid | Cualquier anunciante |
+| `pinterest` | Pinterest Ads | Si usan Pinterest Ads |
+| `youtube` | YouTube Ads | Si usan YouTube Ads |
+| `tiendanube` | Tiendanube — pedidos, abandono, ticket, UTM | **Solo stores TiendaNube** |
+
+**Importante:** TiendaNube es UNA fuente opcional. La mayoría de los datos útiles para cualquier e-commerce vienen de `google`, `meta`, y `google_analytics`.
+
+### Si los MCPs no responden
+
+- `analytics-mcp` falla → usar `Master Metrics source: "google_analytics"` como fallback; si tampoco hay, análisis visual/heurístico únicamente
+- `Master Metrics` falla → saltear Phases 4B y 4C; reportar al usuario
+- El reporte se genera siempre — con o sin datos reales
 
 ---
 
@@ -188,18 +207,26 @@ Score each heuristic 0–3:
 
 ---
 
-## PHASE 4: GA4 Data Integration (always runs via MCP)
+## PHASE 4: GA4 Data Integration
 
-GA4 se conecta automáticamente. No se requiere property ID del usuario.
+GA4 se conecta automáticamente. No se requiere property ID del usuario. Trabaja con **dos rutas** según qué MCP esté disponible.
 
-### 4A — Auto-discovery de la propiedad
+### 4A — Auto-discovery de la propiedad GA4
 
-1. Llama `mcp__analytics-mcp__get_account_summaries` para listar todas las propiedades GA4 disponibles.
-2. Filtra por `displayName` o `websiteUrl` que coincida con el dominio auditado.
-3. Si hay múltiples matches, pregunta al usuario cuál usar. Si hay exactamente uno, úsalo silenciosamente.
-4. Si no hay match, informa al usuario que no se encontró propiedad GA4 asociada y continúa con el análisis visual/heurístico.
+**Ruta primaria — analytics-mcp:**
+1. Llama `mcp__analytics-mcp__get_account_summaries`.
+2. Si responde → filtrá por dominio y guardá el `propertyId`. Seguí con 4B–4G usando `mcp__analytics-mcp__*`.
+3. Si falla (error `invalid_grant` u otro) → avisá al usuario y pasá a la ruta de fallback.
 
-Guarda el `propertyId` (formato `properties/XXXXXXXXX`) para todos los calls siguientes.
+**Ruta fallback — Master Metrics `source: "google_analytics"`:**
+1. Llama `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "google_analytics"`.
+2. Filtrá por dominio. Guardá el `account_id`.
+3. Usá `mcp__claude_ai_Master_Metrics__get_data` con `source: "google_analytics"` para los KPIs básicos (sessions, CVR, bounce).
+4. Nota: el fallback no soporta funnel reports ni custom dimensions — indicar en el reporte qué datos no están disponibles.
+
+Si ninguna ruta funciona → continuar con análisis visual/heurístico únicamente e indicar en el reporte.
+
+Guarda el `propertyId` o `account_id` para todos los calls siguientes.
 
 ### 4B — KPIs generales (últimos 30d vs. 30d anteriores)
 
@@ -299,113 +326,24 @@ Una vez con todos los datos:
 
 ---
 
-## PHASE 4B: Tiendanube via Master Metrics (siempre corre)
-
-Conecta datos reales de ventas, carritos y atribución UTM de las tiendas Tiendanube.
-
-### TN-1 — Auto-discovery de la tienda
-
-1. Llama `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "tiendanube"`.
-2. Filtra por nombre de tienda que coincida con el dominio auditado.
-3. Si hay una sola tienda, úsala silenciosamente. Si hay varias, pregunta al usuario.
-4. Guarda el `account_id` para todos los calls siguientes.
-
-### TN-2 — KPIs de ventas (últimos 30d vs. 30d anteriores)
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "tiendanube"
-accounts: [<account_id>]
-metrics:
-  - tn_orders_sold_count           ← ventas completadas
-  - tn_orders_total                ← facturación total
-  - tn_orders_average_sales_ticket ← ticket promedio
-  - tn_checkouts_count             ← checkouts iniciados
-  - tn_orders_abandoned_count      ← pedidos abandonados
-  - tn_orders_discount             ← descuentos aplicados
-  - tn_customers_count             ← clientes únicos
-dimensions:
-  - month
-```
-
-Calcular:
-- **Tasa de abandono** = `tn_orders_abandoned_count / tn_checkouts_count` × 100 (benchmark: 60–75%)
-- **Revenue perdido en abandono** = tasa_abandono × `tn_checkouts_total` (cifra en $)
-- Delta % vs. período anterior con flecha ↑↓
-
-### TN-3 — Atribución UTM: qué canales generan ventas reales
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "tiendanube"
-metrics:
-  - tn_orders_sold_count
-  - tn_orders_total
-  - tn_orders_average_sales_ticket
-dimensions:
-  - tn_orders_utm_source
-  - tn_orders_utm_medium
-  - tn_orders_utm_campaign
-```
-
-Identifica: qué fuentes/campañas generan revenue real (no solo tráfico). Cruza con GA4 sessions por canal para detectar canales con alto tráfico pero bajo revenue.
-
-### TN-4 — Abandono por pasarela de pago
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "tiendanube"
-metrics:
-  - tn_checkouts_count
-  - tn_checkouts_total
-dimensions:
-  - tn_checkouts_gateway
-```
-
-Si el abandono se concentra en una pasarela (ej: MercadoPago > 40% del total abandonado), es un problema técnico/fricción de pago — prioridad crítica.
-
-### TN-5 — Top productos y categorías
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "tiendanube"
-metrics:
-  - tn_productOrders_quantity
-  - tn_productOrders_subtotal
-  - tn_productOrders_average_price
-dimensions:
-  - tn_productOrders_name_without_variants
-  - tn_productOrders_category
-```
-
-Verifica: ¿la home y las categorías priorizan los productos que más convierten? Si no, es un problema de merchandising.
-
-### TN-6 — Nuevos vs. recurrentes
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "tiendanube"
-metrics:
-  - tn_orders_sold_count
-  - tn_orders_total
-  - tn_orders_average_sales_ticket
-dimensions:
-  - tn_orders_recurrent
-```
-
-Si ticket de recurrentes > 40% del ticket de nuevos: el sitio debería tener mensajes diferenciados por segmento.
-
----
-
-## PHASE 4C: Paid Media via Master Metrics (Meta + Google Ads)
+## PHASE 4B: Paid Media via Master Metrics (Google Ads + Meta Ads)
 
 Esta fase responde la pregunta clave del performance marketing: **¿el problema está en el ad o en la landing page?**
 
+Funciona para **cualquier e-commerce** — no requiere TiendaNube.
+
+### PM-0 — Verificar fuentes disponibles
+
+Antes de correr esta fase:
+1. Llama `mcp__claude_ai_Master_Metrics__get_available_sources` para ver qué fuentes están conectadas.
+2. Identifica cuáles de `google`, `meta`, `pinterest`, `youtube` están disponibles.
+3. Corre solo las sub-fases para las fuentes que existen. Si ninguna está disponible, saltear esta fase.
+
 ### PM-1 — Auto-discovery de cuentas
 
-En paralelo:
-1. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "meta"` → lista cuentas Meta
-2. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "google"` → lista cuentas Google
+En paralelo (solo para fuentes disponibles según PM-0):
+1. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "meta"` → lista cuentas Meta (si disponible)
+2. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "google"` → lista cuentas Google (si disponible)
 
 Si el dominio auditado coincide con el nombre de una cuenta, úsala. Si hay múltiples, pregunta al usuario.
 
@@ -469,16 +407,98 @@ Con los datos de ambas fuentes, responde:
 | CTR alto + CVR bajo | Landing page no convierte lo que el ad promete | Audit de message match |
 | CTR bajo + CVR normal | El ad no está atrayendo al público correcto | Problema de targeting/creativo |
 | ROAS < 1 + CVR normal | CPC muy alto o ticket muy bajo | Problema de bidding/precio |
-| Mobile CTR alto + Mobile CVR muy bajo | UX mobile de la landing page | `performance` skill + mobile audit |
+| Mobile CTR alto + Mobile CVR muy bajo | UX mobile de la landing page | mobile audit |
 | Landing page quality score < 5/10 | Google penaliza la página | Mejoras de relevancia y UX |
-| CPA > ticket promedio TN | Adquisición no es rentable | Revisar AOV o funnel post-click |
+| CPA > AOV (ticket promedio) | Adquisición no es rentable | Revisar AOV o funnel post-click |
 
-### PM-5 — Revenue atribuido vs. revenue real TN
+### PM-5 — Revenue atribuido vs. revenue real (si hay datos de plataforma)
 
-Cruza datos:
-- Revenue atribuido Meta (`fb_pixel_purchase_value`) + Google (`conversions_value`) vs. `tn_orders_total` TN
-- Si la suma de paid supera el total TN → hay doble atribución (usuarios vistos en ambos canales)
-- Brecha real = indica qué porcentaje del revenue tiene paid attribution correctamente trackeado
+Si hay datos de ventas reales (Tiendanube u otra fuente):
+- Cruza revenue atribuido Meta + Google vs. revenue real de la plataforma
+- Si la suma de paid supera el total → hay doble atribución
+- Si solo hay GA4: compará `conversions_value` de GA4 vs. `conversions_value` de cada plataforma paid
+
+---
+
+## PHASE 4C: Datos de plataforma e-commerce (CONDICIONAL — solo si disponible)
+
+Esta fase solo corre si Master Metrics tiene conectada una fuente de e-commerce que coincida con la plataforma del sitio auditado.
+
+### Plataformas soportadas actualmente
+
+| Plataforma | Source en Master Metrics | Datos disponibles |
+|---|---|---|
+| Tiendanube | `tiendanube` | Pedidos, abandono, ticket, UTM, pasarelas, top productos |
+| Otras (Shopify, WooCommerce, etc.) | No disponible aún en Master Metrics | Usar GA4 enhanced e-commerce |
+
+### EC-0 — Verificar si aplica
+
+1. Detectar la plataforma del sitio (en Phase 0: tech stack detection).
+2. Si es Tiendanube: buscar en Master Metrics `source: "tiendanube"` una tienda con dominio coincidente.
+3. Si se encuentra: correr EC-1 a EC-6.
+4. Si no es Tiendanube o no se encuentra la tienda: **saltear esta fase completa** y documentar en el reporte que los datos de plataforma no están disponibles. Para Shopify/WooCommerce, los datos de e-commerce vienen de GA4 Enhanced E-commerce.
+
+### EC-1 — KPIs de ventas TiendaNube (últimos 30d)
+
+Usa `mcp__claude_ai_Master_Metrics__get_data`:
+```
+source: "tiendanube"
+accounts: [<account_id>]
+metrics:
+  - tn_orders_sold_count
+  - tn_orders_total
+  - tn_orders_average_sales_ticket
+  - tn_checkouts_count
+  - tn_orders_abandoned_count
+  - tn_customers_count
+dimensions:
+  - month
+```
+
+Calcular:
+- **Tasa de abandono** = `tn_orders_abandoned_count / tn_checkouts_count` × 100 (benchmark: 60–75%)
+- **Revenue perdido en abandono** en $ — incluir en el reporte como bloque destacado
+- Delta % vs. período anterior
+
+### EC-2 — Atribución UTM
+
+```
+source: "tiendanube"
+metrics: [tn_orders_sold_count, tn_orders_total]
+dimensions: [tn_orders_utm_source, tn_orders_utm_medium, tn_orders_utm_campaign]
+```
+
+Cruza con GA4 sessions por canal: detecta canales con alto tráfico pero bajo revenue real.
+
+### EC-3 — Abandono por pasarela de pago
+
+```
+source: "tiendanube"
+metrics: [tn_checkouts_count, tn_checkouts_total]
+dimensions: [tn_checkouts_gateway]
+```
+
+Si una pasarela concentra > 40% del abandono → es un bug/fricción técnica, prioridad crítica.
+
+### EC-4 — Top productos
+
+```
+source: "tiendanube"
+metrics: [tn_productOrders_quantity, tn_productOrders_subtotal]
+dimensions: [tn_productOrders_name_without_variants, tn_productOrders_category]
+```
+
+¿La home prioriza los productos que más convierten? Si no, es un problema de merchandising.
+
+### EC-5 — Nuevos vs. recurrentes
+
+```
+source: "tiendanube"
+metrics: [tn_orders_sold_count, tn_orders_total, tn_orders_average_sales_ticket]
+dimensions: [tn_orders_recurrent]
+```
+
+Si ticket de recurrentes > 40% del ticket de nuevos → el sitio necesita mensajes diferenciados por segmento.
 
 ---
 

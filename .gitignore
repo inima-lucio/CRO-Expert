@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+cro_*.json
+screenshot_*.png
+cro_report_*.html
+*.pdf
+/tmp/

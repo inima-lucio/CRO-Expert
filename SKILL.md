@@ -1,16 +1,17 @@
 ---
 name: cro-expert
-description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via analytics-mcp — no property ID needed. Cross-references GA4 + TiendaNube + Google Ads + Meta Ads to detect double attribution, channel efficiency gaps, and mobile CVR gaps. Produces a unified funnel from impression to real purchase and an attribution accuracy score. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
+description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via analytics-mcp — no property ID needed. Cross-references GA4 + TiendaNube + Google Ads + Meta Ads to detect double attribution, channel efficiency gaps, and mobile CVR gaps. Applies embedded meta-ads-analyzer (Breakdown Effect, Learning Phase), google-ads-analyzer (Quality Score, Impression Share, Smart Bidding), and ecommerce-bi (RFM, cohorts, CLV, Market Basket) frameworks automatically. Produces a unified funnel from impression to real purchase and an attribution accuracy score. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
 license: MIT
 metadata:
-  version: 2.3.0
+  version: 3.0.0
   author: Lucio Monopoli
   email: inima.lucio@gmail.com
   agency: INIMA Interactive
   category: marketing
   domain: cro-ecommerce
   updated: 2026-06-24
-  tech-stack: analytics-mcp, google-ads-mcp, meta-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
+  tech-stack: analytics-mcp, meta-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
+  embedded-skills: meta-ads-analyzer, google-ads-analyzer, ecommerce-bi
 ---
 
 # CRO Expert — E-commerce Conversion Audit
@@ -63,16 +64,6 @@ Este skill usa **5 MCPs independientes** como fuentes de datos directas — más
 
 ---
 
-### MCP 2 — `google-ads-mcp` (Google Ads) ★ Principal
-
-**Fuente:** Google Ads API directo vía GAQL — campaña, ad group, keyword, device, quality score.  
-**Herramientas:** `mcp__google-ads-mcp__search` (GAQL), `mcp__google-ads-mcp__list_accessible_customers`, `mcp__google-ads-mcp__get_resource_metadata`  
-**Verificar:** llamar `mcp__google-ads-mcp__list_accessible_customers` — si devuelve customer IDs, está activo.  
-**Si falla:** verificar que `GOOGLE_ADS_DEVELOPER_TOKEN` y `GOOGLE_ADS_LOGIN_CUSTOMER_ID` estén configurados en `~/.claude/settings.json`.  
-**Fallback:** si no responde, usar Master Metrics `source: "google"` para Google Ads básico.
-
----
-
 ### MCP 3 — `meta-ads-mcp` (Meta Ads — Facebook + Instagram) ★ Principal
 
 **Fuente:** Meta Marketing API directo — campañas, conjuntos de anuncios, creatividades, pixel events, device split.  
@@ -119,7 +110,7 @@ Este skill usa **5 MCPs independientes** como fuentes de datos directas — más
 | source | Rol | Cuándo usar |
 |---|---|---|
 | `google_analytics` | Fallback GA4 | Solo si `analytics-mcp` falla |
-| `google` | Fallback Google Ads | Solo si `google-ads-mcp` falla |
+| `google` | Fuente primaria Google Ads | Siempre (no hay MCP dedicado en este skill) |
 | `meta` | Fallback Meta Ads | Solo si `meta-ads-mcp` no está conectado |
 | `tiendanube` | Fallback TN | Solo si `tiendanube-mcp` falla |
 | `pinterest` | Opcional | Si el cliente usa Pinterest Ads |
@@ -132,7 +123,7 @@ Este skill usa **5 MCPs independientes** como fuentes de datos directas — más
 | Fuente de datos | MCP primario | Fallback | Sin ninguno |
 |---|---|---|---|
 | Google Analytics 4 | `analytics-mcp` | Master Metrics `google_analytics` | Solo heurístico |
-| Google Ads | `google-ads-mcp` | Master Metrics `google` | Phase 4B-Google skipped |
+| Google Ads | Master Metrics `google` *(MCP dedicado no conectado en este skill)* | — | Phase 4B-Google skipped |
 | Meta Ads | `meta-ads-mcp` *(pendiente setup)* | Master Metrics `meta` | Phase 4B-Meta skipped |
 | TiendaNube | `tiendanube-mcp` | Master Metrics `tiendanube` | GA4 e-commerce usado |
 | Pinterest Ads | *(ver MCPs opcionales)* | Master Metrics `pinterest` | Not shown |
@@ -161,6 +152,22 @@ El skill está diseñado para incorporar nuevas fuentes de datos agregando una e
 3. Agregar su `source` en la tabla de Master Metrics si aplica
 4. Agregar una fila en la Matriz de disponibilidad
 5. Crear la Phase 4B-NOMBRE correspondiente en el Execution Protocol
+
+---
+
+## Embedded Skills
+
+Este skill incorpora los frameworks de 3 skills especializados. No es necesario invocarlos por separado — se activan automáticamente en las fases correspondientes. Los skills deben estar instalados en `~/.claude/skills/`.
+
+| Skill | Se activa en | Qué aporta al audit |
+|---|---|---|
+| `meta-ads-analyzer` | Phase 4B-META | Breakdown Effect (evita errores de interpretación en breakdowns), Learning Phase diagnostics, marginal vs average CPA, ad relevance diagnostics, metric naming estándar |
+| `google-ads-analyzer` | Phase 4B (Google Ads) | Quality Score components (3 diagnósticos), Impression Share lost by budget vs rank, Smart Bidding evaluation, conversion lag rules, Performance Max checklist |
+| `ecommerce-bi` | Phase 4D (BI Layer) | RFM segmentation, cohort retention, CLV, Market Basket / cross-sell, retention gateway product, anchor products — convierte hallazgos CRO en decisiones de negocio concretas |
+
+**Nota sobre `ecommerce-bi`:** se activa si hay un CSV de órdenes disponible (TiendaNube, Shopify, WooCommerce) o si `tiendanube-mcp` tiene datos históricos suficientes (≥ 3 meses). Si no hay datos, la fase se documenta como omitida.
+
+**Nota sobre `google-ads-analyzer`:** el framework se aplica aunque no esté conectado el MCP de Google Ads. Los análisis de Quality Score, IS y Smart Bidding informan recomendaciones incluso sobre datos de Master Metrics.
 
 ---
 
@@ -401,121 +408,115 @@ Una vez con todos los datos:
 
 ---
 
-## PHASE 4B: Google Ads via `google-ads-mcp`
+## PHASE 4B: Google Ads — Framework: google-ads-analyzer
 
 Esta fase responde la pregunta clave del performance marketing: **¿el problema está en el ad o en la landing page?**  
-Usa `google-ads-mcp` como fuente primaria (GAQL directo). Si no está disponible, cae a Master Metrics `source: "google"`.
+Google Ads data se obtiene vía Master Metrics `source: "google"` en este skill. El framework diagnóstico proviene del skill embebido `google-ads-analyzer`.
+
+### Reglas OBLIGATORIAS (google-ads-analyzer)
+
+> Estas reglas se aplican a todos los análisis de esta fase sin excepción.
+
+- **SIEMPRE comparar vs. período anterior** (mínimo mes anterior). Nunca presentar métricas aisladas.
+- **SIEMPRE descontar los últimos 7 días** al evaluar métricas de conversión — el conversion lag subestima datos recientes.
+- **NUNCA aumentar budget** si Search IS Lost by Ad Rank supera el 50%. Primero mejorar Quality Score.
+- **NUNCA juzgar Performance Max** sin revisar asset group performance y ad strength.
+- **Siempre clarificar tipo de conversión**: `conversions` (solo primarias) vs `all_conversions` (primarias + secundarias).
 
 ---
 
-### GAds-0 — Auto-discovery de cuentas
+### GAds-1 — Performance de campañas (30d actual vs. 30d anterior)
 
-```
-mcp__google-ads-mcp__list_accessible_customers
-```
-
-Devuelve todos los customer IDs accesibles. Si hay un manager account (MCC), usar ese customer ID en `GOOGLE_ADS_LOGIN_CUSTOMER_ID` para acceder a las cuentas hijas.
-
-Identifica el customer ID que corresponde al sitio auditado (por nombre o dominio). Si hay múltiples, mostrarle la lista al usuario y pedir que elija.
-
----
-
-### GAds-1 — Performance de campañas (últimos 30d)
-
-Usa `mcp__google-ads-mcp__search` con GAQL:
-
-```sql
-SELECT
-  campaign.name,
-  campaign.status,
-  metrics.cost_micros,
-  metrics.clicks,
-  metrics.impressions,
-  metrics.conversions,
-  metrics.conversions_value,
-  metrics.average_cpc,
-  metrics.conversion_rate,
-  metrics.cost_per_conversion,
-  metrics.ctr
-FROM campaign
-WHERE segments.date DURING LAST_30_DAYS
-  AND campaign.status = 'ENABLED'
-ORDER BY metrics.cost_micros DESC
-LIMIT 20
-```
-
-Calcular (dividir `cost_micros` y `conversions_value` por 1,000,000):
-- **Spend total** y por campaña
-- **ROAS** = `conversions_value / cost` por campaña
-- **CPA** = `cost / conversions`
-- **CTR** = `clicks / impressions`
-- Identifica top 3 campañas por spend y top 3 por ROAS
-
----
-
-### GAds-2 — Performance por device (CVR mobile vs. desktop)
-
-```sql
-SELECT
-  campaign.name,
-  segments.device,
-  metrics.clicks,
-  metrics.conversions,
-  metrics.conversion_rate,
-  metrics.cost_micros,
-  metrics.cost_per_conversion
-FROM campaign
-WHERE segments.date DURING LAST_30_DAYS
-  AND campaign.status = 'ENABLED'
-ORDER BY metrics.clicks DESC
-LIMIT 60
-```
-
-Agrupa por `segments.device` (MOBILE, DESKTOP, TABLET).  
-Calcula ratio CVR mobile / CVR desktop → si < 0.5, marcar como crítico.
-
----
-
-### GAds-3 — Landing page quality score (por keyword)
-
-```sql
-SELECT
-  ad_group_criterion.keyword.text,
-  ad_group_criterion.keyword.match_type,
-  metrics.historical_landing_page_quality_score,
-  metrics.historical_quality_score,
-  metrics.clicks,
-  metrics.conversions,
-  metrics.average_cpc
-FROM keyword_view
-WHERE segments.date DURING LAST_30_DAYS
-  AND metrics.clicks > 10
-ORDER BY metrics.clicks DESC
-LIMIT 30
-```
-
-`historical_landing_page_quality_score` puede ser: `BELOW_AVERAGE`, `AVERAGE`, `ABOVE_AVERAGE`.  
-Si la mayoría de keywords de alto volumen tienen `BELOW_AVERAGE` → Google penaliza la landing con menos impresiones y CPC más alto. Marcar como alerta crítica.
-
----
-
-### GAds-4 — Fallback a Master Metrics (si google-ads-mcp no disponible)
-
-Si `mcp__google-ads-mcp__list_accessible_customers` falla, usar:
 ```
 mcp__claude_ai_Master_Metrics__get_data  source: "google"
-metrics: [spend, clicks, conversions, conversions_value, cost_per_conversion, conversion_rate, historical_landing_page_quality_score]
-dimensions: [campaign.name, segments.device]
+metrics: [spend, clicks, impressions, conversions, conversions_value, cost_per_conversion, conversion_rate, ctr]
+dimensions: [campaign.name]
+date_range: last_30_days + prior_30_days
 ```
-Documentar en el reporte que los datos vienen de Master Metrics (no GAQL directo).
+
+Calcular (excluyendo últimos 7d para conversions):
+- **ROAS** = `conversions_value / spend` — delta % vs. período anterior
+- **CPA** = `spend / conversions` — delta % vs. período anterior
+- **CTR** = `clicks / impressions`
+- Top 3 campañas por spend · Top 3 por ROAS · Campañas con CPA deteriorado > 20%
 
 ---
 
-## PHASE 4B-META: Meta Ads
+### GAds-2 — Performance por device + Impression Share
 
-Meta Ads tiene un MCP dedicado (`meta-ads-mcp`) como fuente primaria. Si no está conectado, cae a Master Metrics `source: "meta"`.
+```
+mcp__claude_ai_Master_Metrics__get_data  source: "google"
+metrics: [clicks, conversions, conversion_rate, spend, cost_per_conversion,
+          search_impression_share, search_budget_lost_impression_share, search_rank_lost_impression_share]
+dimensions: [campaign.name, segments.device]
+```
 
-### META-0 — Verificar disponibilidad
+Agrupa por device (MOBILE, DESKTOP, TABLET).  
+Calcula ratio CVR mobile / CVR desktop → si < 0.5, marcar como crítico.
+
+**Diagnóstico Impression Share (google-ads-analyzer framework):**
+- IS Lost by Budget > IS Lost by Rank → problema de presupuesto, puede aumentarse
+- IS Lost by Rank > 50% → **no aumentar budget** — primero mejorar Quality Score y bids
+- IS Lost by Rank > IS Lost by Budget → problema de relevancia/calidad
+
+---
+
+### GAds-3 — Quality Score + Landing Page Diagnosis
+
+```
+mcp__claude_ai_Master_Metrics__get_data  source: "google"
+metrics: [clicks, conversions, cost_per_conversion,
+          historical_landing_page_quality_score, historical_quality_score]
+dimensions: [campaign.name]
+```
+
+**Quality Score — 3 componentes (google-ads-analyzer framework):**
+
+| Componente | Valor | Diagnóstico CRO |
+|---|---|---|
+| Expected CTR | BELOW_AVERAGE | Problema de ad copy o match type — no es CRO |
+| Ad Relevance | BELOW_AVERAGE | Desalineación keyword → ad → landing — revisar message match |
+| Landing Page Experience | BELOW_AVERAGE | **Problema CRO directo** — Google penaliza la página: velocidad, relevancia, UX |
+
+Si `Landing Page Experience = BELOW_AVERAGE` en campañas de alto volumen → marcar como alerta crítica en Phase 6.  
+Si Master Metrics no devuelve datos → documentarlo en el reporte y aplicar análisis heurístico.
+
+---
+
+### GAds-4 — Smart Bidding & Performance Max (si aplica)
+
+Si hay campañas con Smart Bidding (tCPA, tROAS, Maximize Conversions):
+- Verificar si están en learning period (< 50 conversiones en los últimos 30d)
+- Si el target CPA/ROAS declarado difiere > 30% del real → bidding constraint activo
+- **No tocar bids ni targets hasta que el aprendizaje esté completo**
+
+Si hay campañas Performance Max:
+- Verificar que haya datos de asset group (no solo nivel campaña)
+- Sin asset group data → análisis de PMax incompleto — documentarlo
+- Revisar si hay cannibalization con campañas Search branded
+
+---
+
+## PHASE 4B-META: Meta Ads — Framework: meta-ads-analyzer
+
+Meta Ads tiene un MCP dedicado (`meta-ads-mcp`) como fuente primaria. Si no está conectado, cae a Master Metrics `source: "meta"`. El framework de análisis proviene del skill embebido `meta-ads-analyzer`.
+
+### Reglas OBLIGATORIAS (meta-ads-analyzer)
+
+> Estas reglas se aplican a TODOS los análisis de Meta Ads sin excepción.
+
+- **NUNCA recomendar pausar o reducir budget para un segmento basándose únicamente en CPA/CPM promedio más alto** en breakdowns. El sistema optimiza CPA marginal, no promedio — remover segmentos puede aumentar costos generales. Siempre enmarcar cambios como hipótesis testables.
+- **Evaluar siempre a nivel CORRECTO**: CBO → nivel campaña · Sin CBO con placements automáticos → nivel ad set · Múltiples ads en un ad set → nivel ad set.
+- **Aplicar el lente del Breakdown Effect** en TODA interpretación de datos segmentados (por placement, device, age, gender). Diferencias entre segmentos reflejan la captura diferencial de oportunidades marginales, no performance diferente.
+- **Siempre justificar** recomendaciones con evidencia de datos y mecánicas del sistema Meta.
+- **Naming estándar de métricas**: usar "Link Clicks" (clicks que llevan fuera de la plataforma), nunca "clicks" solo. Reach = "Accounts Center accounts", nunca "people".
+
+### META-0 — Check Learning Phase (ANTES de cualquier análisis)
+
+Antes de interpretar cualquier dato:
+1. ¿Está el ad set en learning phase? (< ~50 optimization events)
+2. ¿Hubo ediciones significativas recientes que resetearon el aprendizaje?
+3. **Si está en learning** → todos los hallazgos son preliminares. No hacer cambios estructurales.
 
 **Ruta primaria — `meta-ads-mcp`:**
 ```
@@ -530,7 +531,7 @@ mcp__claude_ai_Master_Metrics__get_available_sources
 Si `meta` aparece → usar como fallback. Documentar en el reporte qué fuente se usó.  
 Si ninguna responde → saltear esta sub-fase y documentarlo.
 
-### META-1 — Performance Meta Ads (últimos 30d)
+### META-1 — Performance Meta Ads (últimos 30d — nivel correcto de evaluación)
 
 Usa `mcp__claude_ai_Master_Metrics__get_data`:
 ```
@@ -553,9 +554,32 @@ dimensions:
 ```
 
 Calcular:
-- **CVR Meta** = `fb_pixel_purchase / link_clicks` × 100
-- **Funnel Meta**: link_clicks → view_content → add_to_cart → initiate_checkout → purchase
-- ROAS por campaña · CPA real vs. ticket promedio
+- **CVR Meta** = `fb_pixel_purchase / Link Clicks` × 100
+- **Funnel Meta**: Link Clicks → view_content → add_to_cart → initiate_checkout → purchase
+- Purchase ROAS (return on ad spend) por campaña · CPA real vs. ticket promedio
+
+### META-2 — Ad Relevance Diagnostics (meta-ads-analyzer framework)
+
+Para cada ad set activo con volumen significativo, evaluar los 3 rankings:
+
+| Diagnóstico | BELOW_AVERAGE significa | Acción CRO |
+|---|---|---|
+| Quality Ranking | El creativo es percibido como de baja calidad vs. competidores | Problema de creative — no de landing |
+| Engagement Rate Ranking | La audiencia no interactúa con el ad | Problema de targeting o creative |
+| Conversion Rate Ranking | El ad lleva tráfico pero no convierte | **Problema CRO de landing page** — priorizar en Phase 6 |
+
+Si `Conversion Rate Ranking = BELOW_AVERAGE` → señal directa de que la landing page falla post-click. Escalar como alerta crítica.
+
+### META-3 — Breakdown Effect Analysis
+
+Al analizar cualquier breakdown (por placement, device, age, gender):
+
+> **Ejemplo de aplicación**: Si Facebook Feed muestra CPA $10 y Instagram Stories $18, NO concluir que Stories tiene peor performance. Analizar si el CPA marginal de Stories está justificado por el volumen incremental que aporta. El sistema Meta ya optimizó este balance — cambiar el mix puede aumentar el CPA global.
+
+Para cada breakdown con diferencia > 50% en CPA:
+1. Verificar si es tendencia sostenida (> 14 días) o variación normal (20-30% day-to-day es ruido)
+2. Evaluar si el segmento de mayor CPA aporta conversiones que no vienen del otro
+3. Si hay duda → recomendar como hipótesis testable, nunca como acción directa
 
 ---
 
@@ -677,6 +701,86 @@ dimensions: [tn_orders_utm_source, tn_orders_utm_medium, tn_orders_utm_campaign]
 ```
 
 Documentar en el reporte que los datos vienen de Master Metrics (no API directa de TN).
+
+---
+
+## PHASE 4D: BI Layer — Framework: ecommerce-bi
+
+Esta fase convierte los hallazgos CRO en decisiones de negocio concretas usando el framework de `ecommerce-bi`. Los análisis de BI contextualizan las recomendaciones con datos reales de comportamiento de clientes.
+
+**Activación:** se ejecuta si hay un CSV de órdenes disponible (TiendaNube, Shopify, WooCommerce) **O** si `tiendanube-mcp` tiene ≥ 3 meses de histórico. Si no hay datos suficientes → documentar como omitida y continuar.
+
+**Cómo activar:** al llegar a esta fase, preguntar al usuario:
+> "¿Tenés un CSV de órdenes disponible (exportación de TiendaNube, Shopify o WooCommerce)? Si me lo pasás, puedo enriquecer el audit con análisis de clientes y productos que van mucho más allá del tráfico."
+
+Si el usuario tiene CSV → ejecutar con `scripts/bi_analysis.py` del skill ecommerce-bi.  
+Si solo hay datos de tiendanube-mcp → calcular manualmente los análisis posibles con los datos ya obtenidos en Phase 4C.
+
+---
+
+### BI-1 — Análisis a correr (CRO-relevant subset)
+
+No correr los 39 análisis — solo los que tienen impacto directo en las recomendaciones CRO:
+
+| ID | Análisis | Por qué importa para CRO |
+|---|---|---|
+| #3 | Ranking de productos | Valida si la home prioriza los productos que más venden. Si no, es un problema de merchandising. |
+| #39 | Producto gateway de retención | Dice qué producto meter en pauta: el que mejor captura clientes que vuelven, no el más vendido. |
+| #4 | Productos ancla (gateway de carrito) | Qué productos arrastran otros al carrito → hero products para home y cross-sell. |
+| #1 | Market Basket Analysis | Qué se compra junto → cross-sell en PDP y carrito, bundles, "compraron junto". |
+| #7 | Segmentación RFM | Cuántos Champions, At Risk, Hibernating → informa mensajes diferenciados y segmentos a excluir de pauta. |
+| #9 | Cohortes de retención | Si la retención cae a M1, cada cliente nuevo es un gasto → eleva la urgencia de CRO en retención. |
+| #8 | CLV a 3 años | Establece el techo de CAC real → calibra si el CPA de Google/Meta es sostenible. |
+| #6 | Tasa de recompra | Health metric: si < 20%, el negocio es de adquisición pura — cambia las prioridades del audit. |
+| #14 | Impacto de descuentos | AOV con cupón vs. sin cupón → dice si los descuentos ayudan o canibalizan margen. |
+
+**Comando:**
+```bash
+python3 ~/.claude/skills/ecommerce-bi/scripts/bi_analysis.py \
+  --csv "PATH_AL_CSV" \
+  --analysis 1,3,4,6,7,8,9,14,39 \
+  --output "/tmp/bi_cro_results.json"
+```
+
+---
+
+### BI-2 — Cómo los hallazgos BI enriquecen las fases anteriores
+
+Una vez obtenidos los resultados, cruzar con cada área del audit:
+
+**Home / Merchandising:**
+- Si el ranking de productos (#3) no coincide con el orden visual de la home → recomendación: reorganizar hero products
+- El producto gateway de retención (#39) debe estar en el primer scroll de home y ser el hero de pauta
+
+**PDP / Cross-sell:**
+- Market basket (#1): combos con lift > 2 → sección "compraron junto" en PDP y checkout
+- Ancla products (#4): los productos que arrastran más al carrito deben tener las mejores fichas de producto
+
+**Pricing / Checkout:**
+- CLV (#8): si el CPA de Google Ads > 30% del CLV → la adquisición no es rentable a largo plazo
+- Descuentos (#14): si AOV con cupón ≤ AOV sin cupón → los descuentos no empujan carrito → revisar estrategia de promociones
+
+**Audiencias / Pauta:**
+- RFM (#7): Champions y Loyal → excluir de pauta de adquisición (ya compran). At Risk y About to Sleep → campañas de reactivación
+- Tasa de recompra (#6): si < 20% → el negocio no retiene → priorizar UX de post-compra sobre adquisición
+
+**Retención:**
+- Cohortes (#9): si la retención M1 < 15% → problema estructural del producto/experiencia, no de marketing
+- Producto gateway (#39): si el hero product actual NO es el gateway de retención → mal merchandising, cambio urgente
+
+---
+
+### BI-3 — Output: sección BI en el reporte
+
+Agregar una sección **"Inteligencia de Negocio"** en la Page 5 del reporte HTML con:
+- Tabla de ranking de productos (top 10 por revenue + tendencia)
+- Segmentos RFM: distribución de clientes por segmento (Champions / At Risk / Lost / etc.)
+- Funnel de retención: cohorte más reciente vs. promedio (barra comparativa)
+- CLV vs. CPA actual: semáforo (verde = CPA < 30% CLV · amarillo = 30–50% · rojo = > 50%)
+- Market basket: top 5 combos con lift + recomendación de acción
+- Producto gateway de retención: nombre + tasa de recompra vs. baseline global
+
+Si `ecommerce-bi` no pudo correr → indicar en el reporte qué análisis faltaron y cómo obtener los datos.
 
 ---
 

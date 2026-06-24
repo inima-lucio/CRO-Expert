@@ -1043,31 +1043,86 @@ def page_paid_media(domain, date, paid):
     def pkm(val, label, color=""):
         return f'<div class="pkm"><div class="pkm-val {color}">{val}</div><div class="pkm-lbl">{label}</div></div>'
 
+    # ── Meta Ads — soporta formato flat y formato con campaigns array ──────────
     meta_html = ""
-    if meta:
-        meta_html = f"""<div class="paid-section">
+    if meta and not meta.get("note"):
+        # Calcular totales desde campaigns[] si existen, o usar valores directos
+        campaigns = meta.get("campaigns", [])
+        if campaigns:
+            total_spend    = meta.get("total_spend", sum(c.get("spend", 0) for c in campaigns))
+            total_revenue  = sum(c.get("revenue_attributed", 0) for c in campaigns)
+            total_clicks   = sum(c.get("link_clicks", 0) for c in campaigns)
+            total_purchases= sum(c.get("purchases", 0) for c in campaigns)
+            overall_roas   = (total_revenue / total_spend) if total_spend else 0
+            overall_cpa    = (total_spend / total_purchases) if total_purchases else 0
+            overall_cvr    = (total_purchases / total_clicks * 100) if total_clicks else 0
+            # Tabla de campañas
+            camp_rows = ""
+            for c in campaigns:
+                c_roas = c.get("roas", 0)
+                roas_col = "color:#0A8A62;font-weight:800" if c_roas >= 3 else ("color:#D08B00;font-weight:700" if c_roas >= 1 else "color:#D63B3B;font-weight:700")
+                camp_rows += f"""<tr>
+  <td style="font-weight:600;font-size:11px">{c.get("name","")}</td>
+  <td style="text-align:right">${c.get("spend",0):,.0f}</td>
+  <td style="text-align:right">{c.get("link_clicks",0):,}</td>
+  <td style="text-align:right">{c.get("purchases",0)}</td>
+  <td style="text-align:right;{roas_col}">{c_roas:.1f}x</td>
+  <td style="text-align:right">${c.get("cpa",0) or 0:,.0f}</td>
+</tr>"""
+            camp_table = f"""<div style="margin-top:12px;overflow-x:auto">
+  <table class="fw-table" style="font-size:11px">
+    <thead><tr><th>Campaña</th><th style="text-align:right">Inversión</th><th style="text-align:right">Clicks</th><th style="text-align:right">Compras</th><th style="text-align:right">ROAS</th><th style="text-align:right">CPA</th></tr></thead>
+    <tbody>{camp_rows}</tbody>
+  </table>
+</div>""" if camp_rows else ""
+        else:
+            total_spend   = meta.get("spend", 0)
+            overall_roas  = meta.get("roas", 0)
+            overall_cpa   = meta.get("cpa", 0)
+            overall_cvr   = meta.get("cvr", 0)
+            camp_table    = ""
+
+        roas_col = "gold" if overall_roas >= 3 else ("blue" if overall_roas >= 1 else "red")
+        cvr_col  = "green" if overall_cvr >= 1.5 else "red"
+        meta_html = f"""<div class="paid-section" style="grid-column:1/-1">
   <div class="paid-header meta">
     <div class="paid-logo meta">Meta Ads</div>
-    <div class="paid-sub">Facebook + Instagram · Last 30d</div>
+    <div class="paid-sub">Facebook + Instagram · Últimos 30 días</div>
   </div>
   <div class="paid-body">
     <div class="paid-kpi-mini">
-      {pkm(f"${meta.get('spend',0):,.0f}", "Inversión", "")}
-      {pkm(f"{meta.get('roas',0):.1f}x", "ROAS", "gold" if meta.get('roas',0) >= 2 else "red")}
-      {pkm(f"${meta.get('cpa',0):,.0f}", "CPA", "")}
-      {pkm(f"{meta.get('cvr',0):.1f}%", "CVR Post-Click", "green" if meta.get('cvr',0) >= 1.5 else "red")}
+      {pkm(f"${total_spend:,.0f}", "Inversión total", "")}
+      {pkm(f"{overall_roas:.1f}x", "ROAS general", roas_col)}
+      {pkm(f"${overall_cpa:,.0f}" if overall_cpa else "N/D", "CPA", "")}
+      {pkm(f"{overall_cvr:.1f}%", "CVR Post-Click", cvr_col)}
     </div>
+    {camp_table}
   </div>
 </div>"""
 
+    # ── Google Ads ─────────────────────────────────────────────────────────────
     google_html = ""
     if google:
-        lp_score = google.get("landing_page_quality", 0)
-        lp_color = "green" if lp_score >= 7 else ("blue" if lp_score >= 5 else "red")
-        google_html = f"""<div class="paid-section">
+        if google.get("note"):
+            # Sin MCP configurado — mostrar nota informativa con datos de TN UTM si hay
+            google_html = f"""<div class="paid-section" style="{'grid-column:1/-1' if not meta_html else ''}">
   <div class="paid-header google">
     <div class="paid-logo google">Google Ads</div>
-    <div class="paid-sub">Search + Shopping · Last 30d</div>
+    <div class="paid-sub">Search + Shopping · Últimos 30 días</div>
+  </div>
+  <div class="paid-body">
+    <div style="background:#F4F6FA;border-radius:8px;padding:12px 14px;font-size:12px;color:#4B5675">
+      ℹ️ {google.get("note","")}
+    </div>
+  </div>
+</div>"""
+        else:
+            lp_score = google.get("landing_page_quality", 0)
+            lp_color = "green" if lp_score >= 7 else ("blue" if lp_score >= 5 else "red")
+            google_html = f"""<div class="paid-section">
+  <div class="paid-header google">
+    <div class="paid-logo google">Google Ads</div>
+    <div class="paid-sub">Search + Shopping · Últimos 30 días</div>
   </div>
   <div class="paid-body">
     <div class="paid-kpi-mini">
@@ -1079,25 +1134,27 @@ def page_paid_media(domain, date, paid):
   </div>
 </div>"""
 
+    # ── Diagnóstico ────────────────────────────────────────────────────────────
     diag = paid.get("diagnosis", [])
-    diag_rows = ""
-    for d in diag:
-        diag_rows += f'<tr><td class="diag-signal">{d.get("signal","")}</td><td class="diag-dx">{d.get("diagnosis","")}</td><td class="diag-action">{d.get("action","")}</td></tr>'
-
-    diag_html = ""
-    if diag_rows:
-        diag_html = f"""<div style="margin-top:24px">
+    diag_rows = "".join(
+        f'<tr><td class="diag-signal">{d.get("signal","")}</td><td class="diag-dx">{d.get("diagnosis","")}</td><td class="diag-action">{d.get("action","")}</td></tr>'
+        for d in diag
+    )
+    diag_html = f"""<div style="margin-top:24px">
   <div class="chart-title">Diagnóstico: Ad vs. Landing Page</div>
   <table class="diag-table">
     <thead><tr><th>Señal detectada</th><th>Diagnóstico</th><th>Acción recomendada</th></tr></thead>
     <tbody>{diag_rows}</tbody>
   </table>
-</div>"""
+</div>""" if diag_rows else ""
+
+    if not meta_html and not google_html:
+        return ""
 
     return f"""<div class="page">
   <div class="sec-header"><div class="sec-num">5</div><div class="sec-title">Performance de Medios Pagados</div><div class="sec-sub">Meta Ads + Google Ads</div></div>
   <div class="sec-body">
-    <div class="paid-grid">{meta_html}{google_html}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">{meta_html}{google_html}</div>
     {diag_html}
   </div>
   {footer(domain, date, "Medios Pagados")}
@@ -1259,7 +1316,7 @@ def page_plugins(domain, date, plugins):
     <div style="background:linear-gradient(135deg,#080F1E,#0D1E3C);border-radius:12px;padding:20px 24px;margin-bottom:24px;display:flex;align-items:center;gap:20px">
       <div style="font-size:36px">🛠</div>
       <div>
-        <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:4px">Stack de herramientas para llevar dreambig-store.com.ar al siguiente nivel</div>
+        <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:4px">Stack de herramientas para llevar {domain} al siguiente nivel</div>
         <div style="font-size:12px;color:rgba(255,255,255,.55)">La mayoría son gratuitas o de bajo costo. Impacto en CVR compuesto si se instalan juntas: estimado +40–60% en conversión total.</div>
       </div>
     </div>

@@ -10,7 +10,7 @@ metadata:
   category: marketing
   domain: cro-ecommerce
   updated: 2026-06-24
-  tech-stack: analytics-mcp, google-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
+  tech-stack: analytics-mcp, google-ads-mcp, meta-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
 ---
 
 # CRO Expert — E-commerce Conversion Audit
@@ -47,7 +47,7 @@ La última página del reporte se genera automáticamente y contiene:
 
 ## MCPs y fuentes de datos
 
-Este skill usa **4 MCPs independientes**. Cada uno es una fuente de datos directa — no hay dependencias entre ellos. La Phase 4.5 los cruza para detectar discrepancias. Antes de ejecutar el audit, verificá cuáles están activos.
+Este skill usa **5 MCPs independientes** como fuentes de datos directas — más MCPs opcionales extensibles. No hay dependencias entre ellos. La Phase 4.5 los cruza para detectar discrepancias. Antes de ejecutar el audit, verificá cuáles están activos.
 
 **Prioridad de fuente:** MCP dedicado → Master Metrics fallback → heurístico únicamente.
 
@@ -73,7 +73,33 @@ Este skill usa **4 MCPs independientes**. Cada uno es una fuente de datos direct
 
 ---
 
-### MCP 3 — `tiendanube-mcp` (TiendaNube / Nuvemshop) ★ Principal — solo si el sitio usa TN
+### MCP 3 — `meta-ads-mcp` (Meta Ads — Facebook + Instagram) ★ Principal
+
+**Fuente:** Meta Marketing API directo — campañas, conjuntos de anuncios, creatividades, pixel events, device split.  
+**Herramientas:** `mcp__meta-ads-mcp__get_ad_accounts`, `get_campaigns`, `get_adsets`, `get_ads`, `get_insights`  
+**Verificar:** llamar `mcp__meta-ads-mcp__get_ad_accounts` — si devuelve cuentas, está activo.  
+**Estado actual:** ⚠️ **No conectado todavía.** Para habilitarlo:
+  1. Crear una Meta App en [developers.facebook.com](https://developers.facebook.com) con permisos `ads_read`, `ads_management`, `business_management`.
+  2. Generar un `LONG_LIVED_ACCESS_TOKEN` (válido 60 días) o configurar un System User con token permanente.
+  3. Agregar en `~/.claude/settings.json`:
+     ```json
+     "mcpServers": {
+       "meta-ads-mcp": {
+         "command": "npx",
+         "args": ["-y", "meta-ads-mcp"],
+         "env": {
+           "META_ACCESS_TOKEN": "<tu-token>",
+           "META_BUSINESS_ID": "<tu-business-id>"
+         }
+       }
+     }
+     ```
+  4. Correr `/mcp` → Reconnect para activarlo en Claude Code.  
+**Fallback:** si no está activo, usar Master Metrics `source: "meta"` para datos agregados de Meta Ads.
+
+---
+
+### MCP 4 — `tiendanube-mcp` (TiendaNube / Nuvemshop) ★ Principal — solo si el sitio usa TN
 
 **Fuente:** API de TiendaNube directo — orders, products, customers, coupons, store info.  
 **Herramientas:** `mcp__tiendanube-mcp__list_orders`, `list_products`, `list_customers`, `get_store`  
@@ -84,19 +110,20 @@ Este skill usa **4 MCPs independientes**. Cada uno es una fuente de datos direct
 
 ---
 
-### MCP 4 — `Master Metrics` (hub multi-fuente) — Fallback + Meta Ads
+### MCP 5 — `Master Metrics` (hub multi-fuente) — Fallback universal
 
 **Herramientas:** `mcp__claude_ai_Master_Metrics__*`  
-**Rol en este skill:** fallback para GA4/Google Ads/TiendaNube cuando los MCPs dedicados no están disponibles, Y fuente primaria para **Meta Ads** (Facebook + Instagram).  
+**Rol en este skill:** fallback para todos los MCPs dedicados cuando no están disponibles. También actúa como fuente primaria de Meta Ads mientras `meta-ads-mcp` no esté conectado.  
 **Verificar:** llamar `mcp__claude_ai_Master_Metrics__get_available_sources`.
 
 | source | Rol | Cuándo usar |
 |---|---|---|
 | `google_analytics` | Fallback GA4 | Solo si `analytics-mcp` falla |
 | `google` | Fallback Google Ads | Solo si `google-ads-mcp` falla |
-| `meta` | **Primario** Meta Ads | Siempre (no hay MCP dedicado de Meta) |
+| `meta` | Fallback Meta Ads | Solo si `meta-ads-mcp` no está conectado |
 | `tiendanube` | Fallback TN | Solo si `tiendanube-mcp` falla |
-| `pinterest`, `youtube` | Opcional | Si el cliente usa estas plataformas |
+| `pinterest` | Opcional | Si el cliente usa Pinterest Ads |
+| `youtube` | Opcional | Si el cliente usa YouTube Ads |
 
 ---
 
@@ -106,11 +133,34 @@ Este skill usa **4 MCPs independientes**. Cada uno es una fuente de datos direct
 |---|---|---|---|
 | Google Analytics 4 | `analytics-mcp` | Master Metrics `google_analytics` | Solo heurístico |
 | Google Ads | `google-ads-mcp` | Master Metrics `google` | Phase 4B-Google skipped |
-| Meta Ads | Master Metrics `meta` | — | Phase 4B-Meta skipped |
+| Meta Ads | `meta-ads-mcp` *(pendiente setup)* | Master Metrics `meta` | Phase 4B-Meta skipped |
 | TiendaNube | `tiendanube-mcp` | Master Metrics `tiendanube` | GA4 e-commerce usado |
-| Pinterest / YouTube | Master Metrics | — | Not shown |
+| Pinterest Ads | *(ver MCPs opcionales)* | Master Metrics `pinterest` | Not shown |
+| YouTube Ads | *(ver MCPs opcionales)* | Master Metrics `youtube` | Not shown |
 
 **El reporte se genera siempre** — con o sin datos. Cada sección indica qué fuente usó o por qué fue omitida.
+
+---
+
+### MCPs opcionales — Extensibilidad
+
+El skill está diseñado para incorporar nuevas fuentes de datos agregando una entrada en `~/.claude/settings.json` y actualizando la fase correspondiente. MCPs con soporte planificado:
+
+| Plataforma | MCP | Estado | Fase del audit |
+|---|---|---|---|
+| **TikTok Ads** | `tiktok-ads-mcp` | Disponible en npm — pendiente integración | Nueva Phase 4B-TIKTOK |
+| **Pinterest Ads** | `pinterest-ads-mcp` | Master Metrics cubre datos básicos | Phase 4B-META se extiende |
+| **LinkedIn Ads** | `linkedin-ads-mcp` | En desarrollo en comunidad MCP | Nueva Phase para B2B |
+| **Shopify** | `shopify-mcp` | Oficial de Shopify — para tiendas Shopify | Reemplaza tiendanube-mcp |
+| **Klaviyo** | `klaviyo-mcp` | Disponible — email & SMS data | Nueva Phase 4B-EMAIL |
+| **Hotjar / Clarity** | API REST via WebFetch | Sin MCP oficial — usar API key | Enriquece Phase 1 |
+
+**Para agregar un MCP nuevo al skill:**
+1. Instalar/configurar el MCP en `~/.claude/settings.json`
+2. Agregar una sección `### MCP N — nombre` en este archivo con sus herramientas, verificación y fallback
+3. Agregar su `source` en la tabla de Master Metrics si aplica
+4. Agregar una fila en la Matriz de disponibilidad
+5. Crear la Phase 4B-NOMBRE correspondiente en el Execution Protocol
 
 ---
 
@@ -461,16 +511,24 @@ Documentar en el reporte que los datos vienen de Master Metrics (no GAQL directo
 
 ---
 
-## PHASE 4B-META: Meta Ads via Master Metrics
+## PHASE 4B-META: Meta Ads
 
-Meta Ads no tiene MCP dedicado — se obtiene siempre via Master Metrics `source: "meta"`.
+Meta Ads tiene un MCP dedicado (`meta-ads-mcp`) como fuente primaria. Si no está conectado, cae a Master Metrics `source: "meta"`.
 
 ### META-0 — Verificar disponibilidad
 
+**Ruta primaria — `meta-ads-mcp`:**
+```
+mcp__meta-ads-mcp__get_ad_accounts
+```
+Si devuelve cuentas → está activo. Usar `mcp__meta-ads-mcp__get_insights` para los reportes siguientes.
+
+**Ruta fallback — Master Metrics:**
 ```
 mcp__claude_ai_Master_Metrics__get_available_sources
 ```
-Si `meta` no aparece → saltear esta sub-fase y documentarlo.
+Si `meta` aparece → usar como fallback. Documentar en el reporte qué fuente se usó.  
+Si ninguna responde → saltear esta sub-fase y documentarlo.
 
 ### META-1 — Performance Meta Ads (últimos 30d)
 

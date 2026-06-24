@@ -108,7 +108,7 @@ def detect_platform(html):
 
 
 def detect_features(html):
-    """Detect notable CRO features present on the page."""
+    """Detect notable CRO features present on the page (static HTML only)."""
     if not html:
         return []
 
@@ -133,6 +133,107 @@ def detect_features(html):
             features.append(feature)
 
     return features
+
+
+def detect_js_features(url, timeout=15):
+    """
+    Detect JS-rendered features using Playwright (floating buttons, chat widgets, etc.).
+    Returns a dict with confirmed presence/absence of key CRO elements.
+    Falls back gracefully if Playwright is not installed.
+    """
+    result = {
+        "whatsapp_button": False,
+        "whatsapp_url": None,
+        "live_chat_widget": False,
+        "sticky_header": False,
+        "exit_intent_popup": False,
+        "cookie_banner": False,
+        "checked": False,
+    }
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return result  # Playwright not installed — skip JS detection
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            ctx = browser.new_context(
+                viewport={"width": 1440, "height": 900},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+            )
+            page = ctx.new_page()
+            page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+            page.wait_for_timeout(2500)  # Let JS widgets initialize
+
+            result["checked"] = True
+
+            # ── WhatsApp button detection ──────────────────────────────────────
+            wa_selectors = [
+                "a[href*='wa.me']",
+                "a[href*='whatsapp.com/send']",
+                "a[href*='api.whatsapp.com']",
+                "[class*='whatsapp']",
+                "[id*='whatsapp']",
+                "[class*='btn-whatsapp']",
+                "[class*='whatsapp-btn']",
+                "[class*='wp-widget-chat']",
+            ]
+            for sel in wa_selectors:
+                els = page.query_selector_all(sel)
+                for el in els:
+                    try:
+                        if el.is_visible():
+                            result["whatsapp_button"] = True
+                            href = el.get_attribute("href") or ""
+                            if href:
+                                result["whatsapp_url"] = href
+                            break
+                    except Exception:
+                        pass
+                if result["whatsapp_button"]:
+                    break
+
+            # ── Live chat widget ───────────────────────────────────────────────
+            chat_selectors = [
+                "#intercom-container", "#tidio-chat", ".tawk-min-container",
+                "[data-testid='chat-widget']", "#hubspot-messages-iframe-container",
+                ".drift-widget", "#crisp-chatbox",
+            ]
+            for sel in chat_selectors:
+                el = page.query_selector(sel)
+                if el:
+                    try:
+                        if el.is_visible():
+                            result["live_chat_widget"] = True
+                            break
+                    except Exception:
+                        pass
+
+            # ── Cookie banner ──────────────────────────────────────────────────
+            cookie_selectors = [
+                "[class*='cookie']", "[id*='cookie']",
+                "[class*='consent']", "[id*='consent']",
+                "[class*='gdpr']",
+            ]
+            for sel in cookie_selectors:
+                el = page.query_selector(sel)
+                if el:
+                    try:
+                        if el.is_visible():
+                            result["cookie_banner"] = True
+                            break
+                    except Exception:
+                        pass
+
+            ctx.close()
+            browser.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 
 
 def crawl_site(base_url, max_pages=50):
@@ -243,6 +344,31 @@ def main():
 
     url = sys.argv[1]
     results = crawl_site(url)
+
+    # ── JS feature detection (Playwright) ─────────────────────────────────────
+    print("\n🔎 Detecting JS-rendered features (WhatsApp, chat, popups)...", flush=True)
+    js_features = detect_js_features(url)
+    results["js_features"] = js_features
+
+    # Merge confirmed JS features into the features list for visibility
+    if js_features.get("checked"):
+        if js_features.get("whatsapp_button"):
+            wa_url = js_features.get("whatsapp_url", "")
+            label = f"WhatsApp button (visible, flotante) — {wa_url}" if wa_url else "WhatsApp button (visible, flotante)"
+            results["features"].append(label)
+            print(f"   ✅ WhatsApp button VISIBLE — {wa_url or 'no URL captured'}", flush=True)
+        else:
+            results["features"].append("⚠️ Sin botón WhatsApp visible")
+            print("   ⚠️  No WhatsApp button detected", flush=True)
+
+        if js_features.get("live_chat_widget"):
+            results["features"].append("Live chat widget (JS-rendered)")
+            print("   ✅ Live chat widget detected", flush=True)
+
+        if js_features.get("cookie_banner"):
+            results["features"].append("Cookie banner (JS-rendered)")
+    else:
+        print("   ℹ️  Playwright not available — JS detection skipped", flush=True)
 
     # Print human-readable report
     print_report(results)

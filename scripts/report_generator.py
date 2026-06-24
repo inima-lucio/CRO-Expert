@@ -428,6 +428,92 @@ body {
 /* ── Divider ── */
 .divider { border: none; border-top: 1px solid #F0F2F7; margin: 28px 0; }
 
+/* ── Client Takeaway (final page) ── */
+.takeaway-hero {
+  background: linear-gradient(140deg, #080F1E 0%, #0D1E3C 60%, #112040 100%);
+  border-radius: 14px; padding: 32px 36px; margin-bottom: 28px;
+  position: relative; overflow: hidden;
+}
+.takeaway-hero::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: radial-gradient(circle, rgba(43,92,230,.12) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.takeaway-hero-inner { position: relative; z-index: 2; }
+.takeaway-eyebrow {
+  font-size: 9px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase;
+  color: #E8A020; margin-bottom: 10px;
+}
+.takeaway-title { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -.5px; line-height: 1.15; margin-bottom: 6px; }
+.takeaway-sub { font-size: 13px; color: rgba(255,255,255,.5); }
+
+.conclusion-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+.conclusion-card {
+  border-radius: 12px; padding: 20px 18px;
+  border: 1px solid; position: relative;
+}
+.conclusion-card.critical { background: #FEF2F2; border-color: #FECACA; }
+.conclusion-card.strength { background: #EDFAF5; border-color: #A7F3D0; }
+.conclusion-card.opportunity { background: #EEF3FD; border-color: #BFDBFE; }
+.cc-icon { font-size: 24px; margin-bottom: 8px; }
+.cc-label {
+  font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px;
+}
+.conclusion-card.critical    .cc-label { color: #D63B3B; }
+.conclusion-card.strength    .cc-label { color: #0A8A62; }
+.conclusion-card.opportunity .cc-label { color: #2B5CE6; }
+.cc-text { font-size: 12px; line-height: 1.6; color: #1A2236; }
+.cc-data { font-size: 10px; font-weight: 700; margin-top: 8px; color: #8892A4; font-style: italic; }
+
+.action-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+.action-table thead th {
+  font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;
+  color: #8892A4; padding: 0 14px 8px; text-align: left;
+}
+.action-row td {
+  background: #FAFBFD; border-top: 1px solid #E4E8F0; border-bottom: 1px solid #E4E8F0;
+  padding: 14px; vertical-align: middle;
+}
+.action-row td:first-child { border-left: 1px solid #E4E8F0; border-radius: 10px 0 0 10px; padding-left: 16px; }
+.action-row td:last-child  { border-right: 1px solid #E4E8F0; border-radius: 0 10px 10px 0; padding-right: 16px; }
+.action-check {
+  width: 22px; height: 22px; border: 2px solid #D0D8E8; border-radius: 6px;
+  flex-shrink: 0; background: #fff;
+}
+.action-num {
+  width: 26px; height: 26px; background: #080F1E; color: #fff; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 900; flex-shrink: 0;
+}
+.action-title  { font-size: 12px; font-weight: 700; color: #1A2236; margin-bottom: 2px; }
+.action-detail { font-size: 11px; color: #4B5675; line-height: 1.4; }
+.action-page   { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #8892A4; }
+.action-time   { font-size: 11px; font-weight: 700; color: #D08B00; white-space: nowrap; }
+.action-impact { font-size: 11px; font-weight: 800; color: #0A8A62; white-space: nowrap; }
+
+.kpi-track-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+.kpi-track {
+  background: #FAFBFD; border: 1px solid #E4E8F0; border-radius: 12px;
+  padding: 16px 14px; text-align: center;
+}
+.kpi-track-icon { font-size: 20px; margin-bottom: 6px; }
+.kpi-track-label { font-size: 10px; font-weight: 800; color: #4B5675; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+.kpi-track-current { font-size: 20px; font-weight: 900; color: #1A2236; line-height: 1; }
+.kpi-track-target { font-size: 10px; color: #0A8A62; font-weight: 700; margin-top: 4px; }
+
+.cta-contact {
+  background: linear-gradient(135deg, #EEF3FD, #DBEAFE); border: 1px solid #BFDBFE;
+  border-radius: 12px; padding: 20px 24px; margin-top: 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+}
+.cta-contact-text { font-size: 14px; font-weight: 800; color: #1E40AF; }
+.cta-contact-sub  { font-size: 12px; color: #3B82F6; margin-top: 2px; }
+.cta-contact-btn {
+  background: #2B5CE6; color: #fff; border-radius: 8px;
+  padding: 10px 22px; font-size: 12px; font-weight: 800;
+  text-decoration: none; white-space: nowrap; flex-shrink: 0;
+}
+
 @media print {
   body { background: white; }
   .page { box-shadow: none; margin: 0; border-radius: 0; page-break-after: always; max-width: none; }
@@ -627,22 +713,95 @@ def svg_matrix_legend(recs):
 
 # ─── HTML component builders ──────────────────────────────────────────────────
 
-def shot_block(screenshots, key, callouts=None, mobile_key=None):
+def shot_block(screenshots, key, callouts=None, markers=None, mobile_key=None):
+    """
+    screenshots : dict  — key → base64 data URI
+    callouts    : list  — text descriptions numbered 1-N (shown below screenshot)
+    markers     : list  — dicts with {n, x, y, priority} for overlay circles on desktop shot
+                          optional {box_x, box_y, box_w, box_h} for highlight rectangle
+                          x/y are percentages (0–100) of image dimensions
+    """
     mk = mobile_key or f"{key}_mobile"
     dk = f"{key}_desktop"
     d_src = screenshots.get(dk, "")
     m_src = screenshots.get(mk, "")
 
-    def frame(src, label, style="flex:1"):
+    def _marker_overlay(markers_list):
+        if not markers_list:
+            return ""
+        html = ""
+        for m in markers_list:
+            n        = m.get("n", 1)
+            x        = m.get("x", 50)
+            y        = m.get("y", 50)
+            priority = m.get("priority", "warning")
+            color    = {"critical": "#D63B3B", "warning": "#D08B00", "info": "#2B5CE6"}.get(priority, "#D08B00")
+            bg_alpha = {"critical": ".12", "warning": ".10", "info": ".10"}.get(priority, ".10")
+
+            # Optional highlight rectangle
+            if "box_x" in m:
+                bx, by = m["box_x"], m["box_y"]
+                bw, bh = m["box_w"], m["box_h"]
+                r_int = int(color[1:3], 16)
+                g_int = int(color[3:5], 16)
+                b_int = int(color[5:7], 16)
+                html += (
+                    f'<div style="position:absolute;left:{bx}%;top:{by}%;width:{bw}%;height:{bh}%;'
+                    f'border:2px solid {color};border-radius:5px;'
+                    f'background:rgba({r_int},{g_int},{b_int},{bg_alpha});'
+                    f'pointer-events:none;z-index:5"></div>'
+                )
+
+            html += (
+                f'<div style="position:absolute;left:{x}%;top:{y}%;'
+                f'transform:translate(-50%,-50%);width:24px;height:24px;'
+                f'background:{color};border-radius:50%;color:#fff;font-weight:900;'
+                f'font-size:11px;font-family:Inter,system-ui;display:flex;'
+                f'align-items:center;justify-content:center;'
+                f'border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.55);'
+                f'z-index:10;pointer-events:none;line-height:1">{n}</div>'
+            )
+        return html
+
+    def frame(src, label, style="flex:1", is_desktop=False):
         if src:
-            img = f'<img src="{src}" alt="{label}"/>'
+            overlay   = _marker_overlay(markers) if is_desktop and markers else ""
+            fold_line = (
+                '<div style="position:absolute;left:0;right:0;top:46%;'
+                'border-top:2px dashed rgba(255,255,255,.65);z-index:6;pointer-events:none">'
+                '<span style="position:absolute;right:8px;top:-10px;font-size:8px;'
+                'font-weight:800;letter-spacing:1.5px;background:#080F1E;color:#E8A020;'
+                'padding:2px 8px;border-radius:3px;text-transform:uppercase">Fold</span>'
+                '</div>'
+            ) if is_desktop and markers else ""
+            img = (
+                f'<div style="position:relative">'
+                f'<img src="{src}" alt="{label}" style="width:100%;display:block"/>'
+                f'{fold_line}{overlay}'
+                f'</div>'
+            )
         else:
-            img = f'<div class="shot-ph" style="height:260px"><div style="text-align:center;color:#6B8BCC"><div style="font-size:32px;margin-bottom:8px">🖥</div><div style="font-size:10px;font-weight:700;letter-spacing:1px">{label}</div></div></div>'
+            ph_icon = "🖥" if is_desktop else "📱"
+            img = (
+                f'<div class="shot-ph" style="height:260px">'
+                f'<div style="text-align:center;color:#6B8BCC">'
+                f'<div style="font-size:32px;margin-bottom:8px">{ph_icon}</div>'
+                f'<div style="font-size:10px;font-weight:700;letter-spacing:1px">{label}</div>'
+                f'</div></div>'
+            )
         return f'<div class="shot-frame" style="{style}"><div class="shot-label">{label}</div>{img}</div>'
 
-    html = f'<div class="shot-wrap">{frame(d_src,"Desktop")}{frame(m_src,"Mobile","width:150px;flex-shrink:0")}</div>'
+    html = (
+        f'<div class="shot-wrap">'
+        f'{frame(d_src, "Desktop", is_desktop=True)}'
+        f'{frame(m_src, "Mobile", "width:150px;flex-shrink:0")}'
+        f'</div>'
+    )
     if callouts:
-        rows = "".join(f'<div class="callout-row"><div class="callout-n">{i+1}</div><div class="callout-t">{c}</div></div>' for i,c in enumerate(callouts))
+        rows = "".join(
+            f'<div class="callout-row"><div class="callout-n">{i+1}</div><div class="callout-t">{c}</div></div>'
+            for i, c in enumerate(callouts)
+        )
         html += f'<div class="callout-list">{rows}</div>'
     return html
 
@@ -844,7 +1003,7 @@ def page_pages(domain, date, analyses, scores, screenshots):
     <span class="ps-score" style="color:{sc_hex}">{sc}/100</span>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px">
-    <div>{shot_block(screenshots, pt, a.get("callouts",[]))}</div>
+    <div>{shot_block(screenshots, pt, a.get("callouts",[]), a.get("callout_markers",[]))}</div>
     <div>
       <div class="chart-title">Análisis AIDA</div>
       {svg_bars(aida_items, max_val=25)}
@@ -1338,6 +1497,244 @@ def page_plugins(domain, date, plugins):
 </div>"""
 
 
+def page_client_takeaway(domain, date, analyses, scores, recs, ga4, tn):
+    """Final client-facing page: conclusions + 30-day action checklist + KPIs to track."""
+    site_score = calculate_site_score(scores)
+
+    # ── Auto-generate conclusions ─────────────────────────────────────────────
+    all_issues    = [(pt.upper(), i) for pt, a in analyses.items() for i in a.get("issues", [])]
+    all_strengths = [(pt.upper(), s) for pt, a in analyses.items() for s in a.get("strengths", [])]
+    critical_issues = [i for _, i in all_issues if "🔴" in i]
+
+    # Critical conclusion: biggest blocker (prefer checkout > cart > pdp)
+    priority_pages = ["CHECKOUT", "CART", "PDP", "HOME", "PLP"]
+    critical_text = ""
+    critical_data = ""
+    for page in priority_pages:
+        page_issues = [i for pt, i in all_issues if pt == page and "🔴" in i]
+        if page_issues:
+            raw = page_issues[0].replace("🔴", "").replace("🟡", "").strip()
+            critical_text = raw
+            critical_data = f"Encontrado en: {page}"
+            break
+    if not critical_text and all_issues:
+        critical_text = all_issues[0][1].replace("🔴","").replace("🟡","").strip()
+        critical_data = f"Encontrado en: {all_issues[0][0]}"
+
+    # Funnel drop — extract from GA4 if available
+    funnel = ga4.get("funnel", {})
+    drop_off = funnel.get("drop_off", {})
+    biggest_drop_pct = 0
+    biggest_drop_step = ""
+    step_labels = {
+        "entry_to_pdp":       "Entrada → PDP",
+        "pdp_to_atc":         "PDP → Agregar al carrito",
+        "atc_to_checkout":    "Carrito → Checkout",
+        "checkout_to_purchase": "Checkout → Compra",
+    }
+    for k, label in step_labels.items():
+        v = drop_off.get(k, 0)
+        if v > biggest_drop_pct:
+            biggest_drop_pct = v
+            biggest_drop_step = label
+    if biggest_drop_step:
+        opportunity_text = (
+            f"El mayor drop-off del funnel ocurre en el paso "
+            f"<strong>{biggest_drop_step}</strong> — {biggest_drop_pct:.0f}% de usuarios no avanzan. "
+            f"Resolver esto tiene el mayor impacto directo en revenue."
+        )
+        opportunity_data = f"Dato GA4: drop-off {biggest_drop_pct:.0f}% en este paso"
+    else:
+        # Fall back to score-based opportunity
+        worst_page = min(scores, key=scores.get) if scores else "home"
+        opportunity_text = (
+            f"La página con peor score es <strong>{worst_page.upper()}</strong> ({scores.get(worst_page, 0)}/100). "
+            f"Es el punto con mayor oportunidad de mejora inmediata en el funnel."
+        )
+        opportunity_data = f"Score actual: {scores.get(worst_page, 0)}/100"
+
+    # Strength: best thing the site does
+    strength_text = ""
+    if all_strengths:
+        raw = all_strengths[0][1].replace("✅", "").strip()
+        strength_text = raw
+    else:
+        strength_text = "El sitio tiene una estructura de navegación clara y productos bien presentados."
+
+    # ── Top 7 quick-win actions (effort_score ≤ 4, sorted by impact) ─────────
+    quick_recs = sorted(
+        [r for r in recs if r.get("effort_score", 10) <= 4],
+        key=lambda r: (-r.get("impact_score", 0), r.get("effort_score", 10))
+    )[:7]
+
+    # If fewer than 3 quick wins, pull from medium effort too
+    if len(quick_recs) < 3:
+        medium_recs = sorted(
+            [r for r in recs if 4 < r.get("effort_score", 10) <= 6],
+            key=lambda r: -r.get("impact_score", 0)
+        )
+        quick_recs = (quick_recs + medium_recs)[:7]
+
+    # Fallback: generate generic high-value actions from issues
+    if not quick_recs:
+        generic_actions = [
+            {"title": "Agregar botón flotante de WhatsApp", "fix": "En todas las páginas, especialmente mobile", "page": "ALL", "impact": "+8–15% consultas mobile", "effort": "1h"},
+            {"title": "Incluir reseñas de clientes cerca del botón de compra", "fix": "En la PDP, debajo del precio o del CTA", "page": "PDP", "impact": "+10–20% ATC rate", "effort": "2h"},
+            {"title": "Mostrar precio original tachado y ahorro en $", "fix": "Junto al precio de oferta en PDP y PLP", "page": "PDP/PLP", "impact": "+5–10% conversión", "effort": "1h"},
+            {"title": "Agregar badges de seguridad y medios de pago en checkout", "fix": "Debajo del botón de pago", "page": "CHECKOUT", "impact": "+8–12% completion rate", "effort": "1h"},
+            {"title": "Reducir campos en el formulario de checkout a 5 o menos", "fix": "Agrupar nombre/apellido, hacer teléfono opcional", "page": "CHECKOUT", "impact": "+15–30% checkout CVR", "effort": "3h"},
+        ]
+        quick_recs = generic_actions[:5]
+
+    action_rows = ""
+    for i, rec in enumerate(quick_recs, 1):
+        title  = rec.get("title", "")
+        detail = rec.get("fix", rec.get("detail", ""))[:120]
+        page   = rec.get("page", "")
+        time_  = rec.get("effort", f"{rec.get('effort_score',2)*2}h")
+        impact = rec.get("impact", "")
+        action_rows += f"""<tr class="action-row">
+  <td style="width:36px">
+    <div style="display:flex;align-items:center;justify-content:center">
+      <div class="action-num">{i}</div>
+    </div>
+  </td>
+  <td>
+    <div class="action-title">{title}</div>
+    <div class="action-detail">{detail}</div>
+  </td>
+  <td style="width:90px"><div class="action-page">{page}</div></td>
+  <td style="width:70px"><div class="action-time">⏱ {time_}</div></td>
+  <td style="width:120px"><div class="action-impact">↑ {impact}</div></td>
+  <td style="width:36px">
+    <div class="action-check"></div>
+  </td>
+</tr>"""
+
+    # ── KPIs to track in 30 days ──────────────────────────────────────────────
+    cvr_current = ga4.get("kpis", {}).get("cvr", {}).get("current", 0)
+    atc_current = ga4.get("kpis", {}).get("atc_rate", {}).get("current", 0)
+    bounce_current = ga4.get("kpis", {}).get("bounce_rate", {}).get("current", 0)
+    tn_abandonment = tn.get("abandonment_rate", 0)
+    tn_revenue_lost = tn.get("revenue_lost", 0)
+
+    def fmt_kpi(val, unit=""):
+        if val == 0: return "—"
+        if unit == "%": return f"{val:.1f}%"
+        if unit == "$": return f"${val:,.0f}"
+        return str(val)
+
+    kpi_items = [
+        ("📈", "CVR",         fmt_kpi(cvr_current, "%"),      f"Meta: +{max(0.2, round(cvr_current*0.15, 1))}pp"),
+        ("🛒", "ATC Rate",    fmt_kpi(atc_current, "%"),       "Meta: +2–5pp"),
+        ("🏃", "Bounce Rate", fmt_kpi(bounce_current, "%"),    "Meta: −5pp"),
+        ("💸", "Abandono TN", fmt_kpi(tn_abandonment, "%"),    "Meta: −8–10pp"),
+    ]
+    kpi_cards = "".join(f"""<div class="kpi-track">
+  <div class="kpi-track-icon">{icon}</div>
+  <div class="kpi-track-label">{label}</div>
+  <div class="kpi-track-current">{current}</div>
+  <div class="kpi-track-target">{target}</div>
+</div>""" for icon, label, current, target in kpi_items)
+
+    # Revenue uplift estimate (if TN data available)
+    uplift_block = ""
+    revenue = tn.get("revenue_30d", 0) or ga4.get("kpis", {}).get("revenue", {}).get("current", 0)
+    if revenue and cvr_current:
+        conservative_uplift = revenue * 0.12
+        optimistic_uplift   = revenue * 0.25
+        uplift_block = f"""<div style="background:linear-gradient(135deg,#EDFAF5,#D1FAE5);border:1px solid #A7F3D0;border-radius:12px;padding:20px 24px;margin-top:20px;display:flex;align-items:center;gap:20px">
+  <div style="font-size:36px;flex-shrink:0">💰</div>
+  <div>
+    <div style="font-size:13px;font-weight:800;color:#065F46;margin-bottom:4px">Impacto estimado en revenue al implementar estas acciones</div>
+    <div style="font-size:11px;color:#047857;line-height:1.6">
+      Conservador: <strong style="font-size:16px;color:#065F46">${conservative_uplift:,.0f}</strong> adicionales/mes ·
+      Optimista: <strong style="font-size:16px;color:#065F46">${optimistic_uplift:,.0f}</strong> adicionales/mes
+      <br><span style="font-size:10px;color:#6EE7B7">Basado en +12–25% de mejora en CVR sobre revenue actual de ${revenue:,.0f}/mes</span>
+    </div>
+  </div>
+</div>"""
+
+    return f"""<div class="page">
+  <div class="sec-header">
+    <div class="sec-num" style="background:#E8A020">★</div>
+    <div class="sec-title">Conclusiones y Plan de Acción — Para tu Equipo</div>
+    <div class="sec-sub">{domain} · Implementación inmediata</div>
+  </div>
+  <div class="sec-body">
+
+    <div class="takeaway-hero">
+      <div class="takeaway-hero-inner">
+        <div class="takeaway-eyebrow">Síntesis del Audit</div>
+        <div class="takeaway-title">Score CRO: {site_score}/100 — {score_label(site_score)}</div>
+        <div class="takeaway-sub">{domain} · Auditado el {date} por INIMA Interactive</div>
+      </div>
+    </div>
+
+    <div class="conclusion-grid">
+      <div class="conclusion-card critical">
+        <div class="cc-icon">⚠️</div>
+        <div class="cc-label">Problema Crítico</div>
+        <div class="cc-text">{critical_text or "Se detectaron fricciones en el funnel de compra que impactan directamente la tasa de conversión."}</div>
+        <div class="cc-data">{critical_data}</div>
+      </div>
+      <div class="conclusion-card strength">
+        <div class="cc-icon">✅</div>
+        <div class="cc-label">Fortaleza del Sitio</div>
+        <div class="cc-text">{strength_text}</div>
+        <div class="cc-data">Mantener y potenciar</div>
+      </div>
+      <div class="conclusion-card opportunity">
+        <div class="cc-icon">🎯</div>
+        <div class="cc-label">Mayor Oportunidad</div>
+        <div class="cc-text">{opportunity_text}</div>
+        <div class="cc-data">{opportunity_data}</div>
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:#4B5675;margin-bottom:14px">
+      Próximos 30 días — Acciones concretas ordenadas por impacto
+    </div>
+
+    <table class="action-table">
+      <thead>
+        <tr>
+          <th style="width:36px">#</th>
+          <th>Acción</th>
+          <th style="width:90px">Dónde</th>
+          <th style="width:70px">Tiempo</th>
+          <th style="width:120px">Impacto esperado</th>
+          <th style="width:36px">✓</th>
+        </tr>
+      </thead>
+      <tbody>{action_rows}</tbody>
+    </table>
+
+    {uplift_block}
+
+    <div style="margin-top:28px">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:#4B5675;margin-bottom:14px">
+        KPIs a medir en 30 días — ¿cómo saber si funcionó?
+      </div>
+      <div class="kpi-track-grid">{kpi_cards}</div>
+    </div>
+
+    <div class="cta-contact">
+      <div>
+        <div class="cta-contact-text">¿Preguntas sobre cómo implementar esto?</div>
+        <div class="cta-contact-sub">El equipo de INIMA Interactive está disponible para acompañar la implementación</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="cta-contact-btn" href="mailto:info@iniminteractive.com">✉ info@iniminteractive.com</a>
+        <a class="cta-contact-btn" style="background:#25D366" href="https://wa.me/541135011128">💬 WhatsApp</a>
+      </div>
+    </div>
+
+  </div>
+  {footer(domain, date, "Plan de Acción para el Cliente")}
+</div>"""
+
+
 # ─── Main assembler ───────────────────────────────────────────────────────────
 
 def build_report(analyses, discovery, ga4, tn, paid, ab_plan, plugins, screenshots, scores, recs, roadmap):
@@ -1356,6 +1753,7 @@ def build_report(analyses, discovery, ga4, tn, paid, ab_plan, plugins, screensho
         page_recommendations(domain, date, recs),
         page_ab_plan(domain, date, ab_plan),
         page_plugins(domain, date, plugins),
+        page_client_takeaway(domain, date, analyses, scores, recs, ga4, tn),
     ]
 
     return f"""<!DOCTYPE html>

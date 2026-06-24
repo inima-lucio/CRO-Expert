@@ -3,13 +3,13 @@ name: cro-expert
 description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via MCP — no property ID needed. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
 license: MIT
 metadata:
-  version: 2.0.0
+  version: 2.1.0
   author: Lucio Monopoli
   email: inima.lucio@gmail.com
   agency: INIMA Interactive
   category: marketing
   domain: cro-ecommerce
-  updated: 2026-06-23
+  updated: 2026-06-24
   tech-stack: GA4-MCP, Master-Metrics-MCP, Meta Ads, Google Ads, Tiendanube, WebFetch, Playwright
 ---
 
@@ -29,43 +29,48 @@ Examples:
 - `/cro https://mystore.com`
 - `/cro https://mystore.com --pages home,pdp,checkout --pdf`
 
+## Output: HTML por defecto — PDF si se pide
+
+- **Sin flag**: genera `cro_report.html` — se abre en el navegador, imprimible.
+- **Con `--pdf`**: genera además `cro_report.pdf` via Playwright (requiere `pip install playwright && playwright install chromium`).
+- El reporte siempre incluye **10 secciones**, siendo la última la **Hoja de Conclusiones y Plan de Acción** — diseñada para que el cliente la comparta con su equipo y use como checklist de implementación inmediata.
+
+## Página final: Conclusiones y Plan de Acción
+
+La última página del reporte se genera automáticamente y contiene:
+1. **Score global** del sitio con etiqueta semáforo
+2. **3 conclusiones** generadas dinámicamente: Problema Crítico · Fortaleza · Mayor Oportunidad
+3. **Checklist de 5–7 acciones** de los próximos 30 días, ordenadas por impacto, con columnas: Acción / Dónde / Tiempo / Impacto esperado / Checkbox
+4. **Estimación de revenue adicional** si hay datos de GA4/Tiendanube (+12–25% sobre revenue actual)
+5. **KPIs a medir**: CVR actual con meta a 30 días, ATC Rate, Bounce Rate, Abandono TN
+6. **CTA de contacto** con INIMA Interactive
+
 ## MCPs requeridos
 
-Para que el skill funcione con datos reales, el usuario debe tener configurados los siguientes MCPs en Claude Code:
+Hay dos tipos de integración. Verificá cuáles están activos antes de ejecutar el audit:
 
-| MCP | Fuente de datos | Requerido |
-|---|---|---|
-| `analytics-mcp` | Google Analytics 4 | Opcional — sin él no hay datos GA4 |
-| `Master Metrics MCP` | Tiendanube, Meta Ads | Opcional — sin él no hay datos de ventas ni paid |
-| `google-ads-mcp` | Google Ads (oficial Google) | Opcional — sin él no hay datos de Google Ads |
+### Tipo 1 — Claude Code MCP (configurado en `~/.claude/settings.json`)
 
-### Instalar Google Ads MCP (oficial de Google)
+| MCP | Fuente | Herramienta Claude | Sin él |
+|---|---|---|---|
+| `analytics-mcp` | Google Analytics 4 | `mcp__analytics-mcp__*` | No hay datos GA4 |
 
-```json
-// Agregar en ~/.claude/claude_desktop_config.json → mcpServers
-{
-  "google-ads": {
-    "command": "pipx",
-    "args": [
-      "run",
-      "--spec",
-      "git+https://github.com/googleads/google-ads-mcp.git",
-      "google-ads-mcp"
-    ],
-    "env": {
-      "GOOGLE_PROJECT_ID": "TU_GOOGLE_CLOUD_PROJECT_ID",
-      "GOOGLE_ADS_DEVELOPER_TOKEN": "TU_DEVELOPER_TOKEN"
-    }
-  }
-}
-```
+**Verificar:** `mcp__analytics-mcp__get_account_summaries` → si devuelve propiedades, está activo.
 
-**Cómo obtener las credenciales:**
-1. **Developer Token** → Google Ads → Herramientas → API Center → Solicitar acceso
-2. **Google Cloud Project ID** → console.cloud.google.com → crear proyecto → habilitar Google Ads API
-3. **OAuth** → se configura automáticamente con Application Default Credentials (`gcloud auth application-default login`)
+### Tipo 2 — claude.ai native integrations (habilitadas en claude.ai → Settings → Integrations)
 
-Si el usuario NO tiene este MCP configurado, saltear la sección de Google Ads en Phase 4C e indicar: *"Google Ads MCP no configurado — instalá `google-ads-mcp` para incluir datos de campañas en el reporte."*
+| Integración | Fuente | Herramienta Claude | Sin ella |
+|---|---|---|---|
+| `Master Metrics` | Tiendanube + Meta Ads + Google Ads | `mcp__claude_ai_Master_Metrics__*` | No hay datos de ventas ni paid |
+| `META Ads` | Meta Ads (auth nativa) | `mcp__claude_ai_META_Ads__*` | Usá solo Master Metrics para Meta |
+
+**Verificar:** `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "tiendanube"` → si devuelve tiendas, está activo.
+
+### Si los MCPs no están disponibles
+
+- Si `analytics-mcp` no responde → saltear Phase 4 completa e indicar al usuario
+- Si `Master Metrics` no responde → saltear Phase 4B, 4C e indicar al usuario
+- El reporte se genera igual con análisis visual + heurístico de todas las páginas
 
 ---
 
@@ -103,7 +108,14 @@ For each discovered page:
    - Save as `screenshot_<page>_desktop.png` (e.g. `screenshot_pdp_desktop.png`)
 2. Take a **second screenshot** at 390px width (mobile)
    - Save as `screenshot_<page>_mobile.png`
-3. Note above-the-fold boundary, first CTA visibility, hero content, and prepare 3–5 numbered callouts per page (what to annotate in the report)
+3. Identify 3–5 CRO issues visible in the screenshot and for each one:
+   - Write a numbered callout text (for the `callouts` array)
+   - Estimate its **approximate position** in the screenshot as x/y percentages (for `callout_markers`)
+   - Use your CRO expertise: e.g., hero area is ~x:50,y:25; nav is ~x:50,y:6; CTA button typical PDP ~x:30,y:55
+   - Assign priority: `critical` (red) for blocking issues, `warning` (orange) for friction, `info` (blue) for improvements
+   - Add a bounding box (`box_x/box_y/box_w/box_h`) when the issue covers a specific region (e.g., reviews section missing, no trust badges area)
+
+The `callout_markers` field is what makes markers appear **overlaid directly on the screenshot** in the report. Without it, only text callouts show below. Always generate both fields.
 
 All screenshots go into the analysis working directory so `report_generator.py` can embed them as base64 in the final HTML/PDF.
 
@@ -540,7 +552,39 @@ Each `cro_analysis_<page>.json` must include these keys for the report to be ric
   "score": 62,
   "issues": ["🔴 No social proof above fold", "🟡 CTA below fold on mobile"],
   "strengths": ["✅ Price anchoring visible"],
-  "callouts": ["CTA button is below fold", "No trust badges near price", "Reviews section missing"],
+  "callouts": [
+    "1. CTA button is below the fold — not visible without scrolling",
+    "2. No trust badges near price — missing SSL, payment logos",
+    "3. Reviews section is absent above the fold"
+  ],
+  "callout_markers": [
+    {
+      "n": 1,
+      "x": 28,
+      "y": 62,
+      "priority": "critical",
+      "box_x": 5,
+      "box_y": 55,
+      "box_w": 45,
+      "box_h": 14
+    },
+    {
+      "n": 2,
+      "x": 72,
+      "y": 48,
+      "priority": "warning"
+    },
+    {
+      "n": 3,
+      "x": 50,
+      "y": 78,
+      "priority": "critical",
+      "box_x": 5,
+      "box_y": 72,
+      "box_w": 90,
+      "box_h": 10
+    }
+  ],
   "aida": { "attention": 18, "interest": 14, "desire": 10, "action": 8 },
   "cialdini": { "social_proof": 1, "urgency": 0, "scarcity": 1, "authority": 2, "reciprocity": 1, "commitment": 0, "liking": 2 },
   "nielsen": { "h1": 2, "h2": 3, "h3": 1, "h4": 2, "h5": 1, "h6": 2, "h7": 2, "h8": 1, "h9": 1, "h10": 2 },

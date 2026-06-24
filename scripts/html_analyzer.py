@@ -41,11 +41,98 @@ class CROHTMLParser(HTMLParser):
         self._form_fields = 0
         self.all_text = []
         self._breadcrumbs = False
+        # WhatsApp / chat widgets
+        self.whatsapp_signals = []   # list of dicts with detection details
+        self._in_script = False
+        self._script_buffer = []
+
+    # ── WhatsApp detection helpers ────────────────────────────────────────
+    _WA_HREF_PATTERNS = ["wa.me/", "api.whatsapp.com/send", "whatsapp://send", "web.whatsapp.com"]
+    _WA_CLASS_KEYWORDS = ["whatsapp", "wapp", "wa-btn", "wa-float", "wa-chat", "wts-chat",
+                          "wpp-button", "socialwidget", "wati-widget", "wp-whatsapp"]
+    _WA_ID_KEYWORDS   = ["whatsapp", "wa-btn", "wa-chat", "wati", "wpp"]
+    # Third-party scripts known to inject floating WA buttons
+    _WA_SCRIPT_DOMAINS = ["wati.io", "elfsight.com", "getbutton.io", "socialintents.com",
+                          "wappex.com", "joinchat.net", "callbell.eu", "tidio.co",
+                          "mylivechat.com", "wa-link.io", "zopim.com"]
+    # Inline CSS signals: position:fixed + bottom/right suggests floating widget
+    _WA_STYLE_SIGNALS  = ["position:fixed", "position: fixed"]
+
+    # SVG structural tags — never a button on their own
+    _SVG_TAGS = {"symbol", "path", "defs", "svg", "g", "use", "circle", "rect",
+                 "polygon", "polyline", "line", "ellipse", "clippath", "mask",
+                 "linearGradient", "radialGradient", "stop", "filter", "feBlend"}
+
+    def _check_whatsapp(self, tag, attrs_dict):
+        """Returns a detection dict if this element looks like a WA floating button, else None."""
+        # SVG definition tags are icon assets, not interactive elements
+        if tag.lower() in self._SVG_TAGS:
+            return None
+
+        href     = attrs_dict.get("href", "").lower()
+        classes  = attrs_dict.get("class", "").lower()
+        elem_id  = attrs_dict.get("id", "").lower()
+        style    = attrs_dict.get("style", "").lower().replace(" ", "")
+        data_str = " ".join(str(v) for k, v in attrs_dict.items() if k.startswith("data-")).lower()
+        src      = attrs_dict.get("src", "").lower()
+
+        reasons = []
+
+        # Href pointing directly to WhatsApp — strongest signal
+        if any(p in href for p in self._WA_HREF_PATTERNS):
+            reasons.append(f"href={href[:60]}")
+
+        # Class/id signals only matter on interactive or positioned elements
+        interactive = tag in {"a", "button", "div", "span", "section", "aside", "li", "img"}
+        if interactive:
+            if any(k in classes for k in self._WA_CLASS_KEYWORDS):
+                reasons.append("class contains WA keyword")
+            if any(k in elem_id for k in self._WA_ID_KEYWORDS):
+                reasons.append(f"id={elem_id[:40]}")
+
+        if "whatsapp" in data_str or "wa.me" in data_str:
+            reasons.append("data-* attribute references WhatsApp")
+
+        if "position:fixed" in style and ("bottom" in style or "right" in style):
+            if "whatsapp" in (classes + elem_id + href + data_str):
+                reasons.append("position:fixed + WA reference → floating widget")
+
+        if any(k in src for k in ["whatsapp", "wa-logo", "wapp"]) and tag == "img":
+            reasons.append(f"img src={src[:50]}")
+
+        if not reasons:
+            return None
+
+        is_floating = (
+            "position:fixed" in style
+            or any(k in classes for k in ["float", "fixed", "sticky", "fab", "widget"])
+        )
+        return {"tag": tag, "reasons": reasons, "is_floating": is_floating}
+
+    # ── End WhatsApp helpers ───────────────────────────────────────────────
 
     def handle_starttag(self, tag, attrs):
         attrs_dict = dict(attrs)
         self._current_tag = tag
         self._current_attrs = attrs_dict
+
+        # Script buffering — needed to scan inline JS for WA widget init code
+        if tag == "script":
+            self._in_script = True
+            self._script_buffer = []
+            src = attrs_dict.get("src", "").lower()
+            if any(domain in src for domain in self._WA_SCRIPT_DOMAINS):
+                self.whatsapp_signals.append({
+                    "tag": "script[src]",
+                    "reasons": [f"known WA-widget provider in src: {src[:80]}"],
+                    "is_floating": True,
+                })
+            return
+
+        # WhatsApp element detection (any tag can host the button)
+        wa = self._check_whatsapp(tag, attrs_dict)
+        if wa:
+            self.whatsapp_signals.append(wa)
 
         if tag == "title":
             self._in_title = True
@@ -114,6 +201,46 @@ class CROHTMLParser(HTMLParser):
             self._breadcrumbs = True
 
     def handle_endtag(self, tag):
+        if tag == "script" and self._in_script:
+            self._in_script = False
+            script_text = " ".join(self._script_buffer).lower()
+            # Scan inline JS for WhatsApp widget initialization patterns
+            wa_js_patterns = [
+                # Direct WA URLs
+                "wa.me/", "api.whatsapp.com", "whatsapp://send",
+                # Third-party widget providers
+                "wati", "getbutton", "elfsight", "joinchat", "callbell",
+                "socialintents", "wappex", "wa-link",
+                # Common JS config keys
+                "whatsappbuttoncolor", "whatsappphonenumber",
+                "wafloating", "wppconnect",
+                "whatsapp_phone", "phone_whatsapp",
+                # Tienda Nube native WhatsApp button
+                # TN injects a fixed bottom button and references it in scripts like:
+                #   "// Whatsapp button position"  +  "js-btn-fixed-bottom"
+                "whatsapp button position",
+                "js-btn-fixed-bottom",
+                # Shopify / WooCommerce common app patterns
+                "whatsapp-chat-widget", "wp-whatsapp",
+            ]
+            matched = [p for p in wa_js_patterns if p in script_text]
+            if matched:
+                # Tienda Nube's native button requires both signals together
+                is_tn_native = (
+                    "whatsapp button position" in script_text
+                    and "js-btn-fixed-bottom" in script_text
+                )
+                self.whatsapp_signals.append({
+                    "tag": "script[inline]",
+                    "reasons": [
+                        f"inline JS contains: {', '.join(matched[:3])}"
+                        + (" [Tienda Nube native WA button]" if is_tn_native else "")
+                    ],
+                    "is_floating": True,
+                })
+            self._script_buffer = []
+            return
+
         if tag == "title":
             self._in_title = False
         elif tag == "h1":
@@ -131,6 +258,10 @@ class CROHTMLParser(HTMLParser):
     def handle_data(self, data):
         data = data.strip()
         if not data:
+            return
+
+        if self._in_script:
+            self._script_buffer.append(data)
             return
 
         if self._in_title:
@@ -173,6 +304,34 @@ class CROHTMLParser(HTMLParser):
         # Accumulate all text for copy analysis
         if len(data) > 10:
             self.all_text.append(data)
+
+
+def _summarize_whatsapp(signals):
+    """Collapse raw WA signals into a clean summary dict."""
+    if not signals:
+        return {"detected": False, "floating": False, "signals": []}
+
+    # Deduplicate by reason text
+    seen = set()
+    unique = []
+    for s in signals:
+        key = s["tag"] + "|" + "|".join(s["reasons"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(s)
+
+    floating = any(s["is_floating"] for s in unique)
+    return {
+        "detected": True,
+        "floating": floating,
+        "signal_count": len(unique),
+        "signals": [{"tag": s["tag"], "reason": s["reasons"][0]} for s in unique[:5]],
+        "note": (
+            "Floating WhatsApp button detected — positive for mobile conversion (direct channel)"
+            if floating else
+            "WhatsApp link detected (not clearly floating/fixed position)"
+        ),
+    }
 
 
 def fetch_html(url):
@@ -273,6 +432,7 @@ def analyze_page(url, page_type="unknown"):
             "missing_alt": len(images_without_alt),
             "alt_coverage": f"{(1 - len(images_without_alt)/max(len(parser.images),1))*100:.0f}%",
         },
+        "whatsapp": _summarize_whatsapp(parser.whatsapp_signals),
         "issues": [],
         "strengths": [],
     }
@@ -313,6 +473,16 @@ def analyze_page(url, page_type="unknown"):
     if not urgency_signals and page_type in ["pdp", "cart"]:
         findings["issues"].append("🟢 No urgency signals — consider adding stock/time triggers")
 
+    wa = findings["whatsapp"]
+    if wa["detected"] and wa["floating"]:
+        pass  # handled in strengths below
+    elif wa["detected"] and not wa["floating"]:
+        findings["issues"].append("🟡 WhatsApp link detected but not as a floating button — a fixed-position widget converts better on mobile")
+    else:
+        # Only flag missing WA on home/pdp/cart — checkout noise is irrelevant
+        if page_type in ["home", "pdp", "cart"]:
+            findings["issues"].append("🟡 No WhatsApp button detected — floating WA chat increases mobile conversions 8–15% for LATAM stores")
+
     # Strengths
     if h1 and len(h1) == 1:
         findings["strengths"].append("✅ Single clear H1 tag")
@@ -324,6 +494,8 @@ def analyze_page(url, page_type="unknown"):
         findings["strengths"].append(f"✅ Trust signals found ({len(set(parser.trust_signals))})")
     if parser._breadcrumbs:
         findings["strengths"].append("✅ Breadcrumb navigation present")
+    if wa["detected"] and wa["floating"]:
+        findings["strengths"].append("✅ Floating WhatsApp button detected — direct conversion channel active")
 
     return findings
 
@@ -360,6 +532,15 @@ def print_analysis(findings):
 
     if findings["trust"]["trust_signals"]:
         print(f"\n🔒 TRUST: {findings['trust']['trust_signals'][:3]}")
+
+    wa = findings["whatsapp"]
+    if wa["detected"]:
+        icon = "✅" if wa["floating"] else "🟡"
+        print(f"\n💬 WHATSAPP: {icon} {wa['note']}")
+        for s in wa["signals"][:3]:
+            print(f"   → [{s['tag']}] {s['reason']}")
+    else:
+        print(f"\n💬 WHATSAPP: ❌ No WhatsApp button detected")
 
     if findings["issues"]:
         print(f"\n❗ ISSUES FOUND:")

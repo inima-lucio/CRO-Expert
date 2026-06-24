@@ -730,18 +730,23 @@ def shot_block(screenshots, key, callouts=None, markers=None, mobile_key=None):
         if not markers_list:
             return ""
         html = ""
+        # Radius of the numbered circle in % of image width (approx 12px on ~600px wide image)
+        CR = 2.0  # percent — keeps circles fully inside when clamped
         for m in markers_list:
             n        = m.get("n", 1)
-            x        = m.get("x", 50)
-            y        = m.get("y", 50)
+            # Clamp circle centre so the 24px badge never overflows the image edge
+            x        = max(CR, min(100 - CR, m.get("x", 50)))
+            y        = max(CR, min(100 - CR, m.get("y", 50)))
             priority = m.get("priority", "warning")
             color    = {"critical": "#D63B3B", "warning": "#D08B00", "info": "#2B5CE6"}.get(priority, "#D08B00")
             bg_alpha = {"critical": ".12", "warning": ".10", "info": ".10"}.get(priority, ".10")
 
-            # Optional highlight rectangle
+            # Optional highlight rectangle — clamp so it never exceeds 100%
             if "box_x" in m:
-                bx, by = m["box_x"], m["box_y"]
-                bw, bh = m["box_w"], m["box_h"]
+                bx = max(0, min(99, m["box_x"]))
+                by = max(0, min(99, m["box_y"]))
+                bw = max(1, min(m["box_w"], 100 - bx))
+                bh = max(1, min(m["box_h"], 100 - by))
                 r_int = int(color[1:3], 16)
                 g_int = int(color[3:5], 16)
                 b_int = int(color[5:7], 16)
@@ -775,7 +780,7 @@ def shot_block(screenshots, key, callouts=None, markers=None, mobile_key=None):
                 '</div>'
             ) if is_desktop and markers else ""
             img = (
-                f'<div style="position:relative">'
+                f'<div style="position:relative;overflow:hidden">'
                 f'<img src="{src}" alt="{label}" style="width:100%;display:block"/>'
                 f'{fold_line}{overlay}'
                 f'</div>'
@@ -1320,6 +1325,187 @@ def page_paid_media(domain, date, paid):
 </div>"""
 
 
+def svg_bar_chart(channels, metric_key="sessions", color="#2B5CE6", label="Sesiones", max_override=None):
+    """Horizontal bar chart comparing channels across a single metric."""
+    if not channels:
+        return ""
+    vals = [c.get(metric_key, 0) or 0 for c in channels]
+    max_val = max_override or (max(vals) if vals else 1) or 1
+    rows = ""
+    for c, v in zip(channels, vals):
+        pct = min(v / max_val * 100, 100)
+        name = c.get("channel", c.get("name", ""))[:28]
+        disp = f"{v:.1f}%" if isinstance(v, float) else f"{v:,}"
+        rows += f"""<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px">
+  <div style="width:130px;flex-shrink:0;color:#4B5675;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{name}</div>
+  <div style="flex:1;background:#F4F6FA;border-radius:4px;height:18px;position:relative">
+    <div style="width:{pct:.1f}%;background:{color};border-radius:4px;height:100%"></div>
+  </div>
+  <div style="width:52px;flex-shrink:0;font-weight:700;color:#1A2340">{disp}</div>
+</div>"""
+    return f'<div style="padding:4px 0"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8892A4;margin-bottom:10px">{label}</div>{rows}</div>'
+
+
+def page_triangulation(domain, date, ga4, paid):
+    """Page 5B — Gráfico comparativo multifuentes: GA4 + Google Ads + Meta Ads."""
+    if not ga4 and not paid:
+        return ""
+
+    # Gather channel data from GA4
+    ga4_channels = ga4.get("traffic_by_channel_30d", {}).get("current", []) if ga4 else []
+    # Normalise: each item needs 'channel', 'sessions', 'bounce' (optional), engagement
+    # Support both list and legacy dict format
+    if isinstance(ga4_channels, dict):
+        ga4_channels = [{"channel": k, **v} for k, v in ga4_channels.items()]
+
+    # Build sessions bar chart data
+    sessions_data = [{"channel": c.get("channel",""), "sessions": int(c.get("sessions", 0))}
+                     for c in ga4_channels if c.get("sessions")]
+    sessions_data.sort(key=lambda x: -x["sessions"])
+
+    # Build engagement rate chart
+    engagement_data = [{"channel": c.get("channel",""), "sessions": round((1 - float(c.get("bounce", c.get("bounce_rate", 0.5)))) * 100, 1)}
+                       for c in ga4_channels if c.get("sessions")]
+    engagement_data.sort(key=lambda x: -x["sessions"])
+
+    # Device breakdown from GA4
+    device = ga4.get("cvr_by_device", {}) if ga4 else {}
+    bounce_by_device = ga4.get("kpis", {}) if ga4 else {}
+    mobile_dur  = ga4.get("kpis", {}).get("avg_session_mobile", ga4.get("avg_session_mobile", None)) if ga4 else None
+    desktop_dur = ga4.get("kpis", {}).get("avg_session_desktop", ga4.get("avg_session_desktop", None)) if ga4 else None
+    # Try top-level keys too
+    if mobile_dur is None and ga4:
+        mobile_dur  = ga4.get("avg_session_mobile")
+    if desktop_dur is None and ga4:
+        desktop_dur = ga4.get("avg_session_desktop")
+
+    # Paid media summary
+    meta   = (paid or {}).get("meta", {})
+    google = (paid or {}).get("google", {})
+    meta_available   = bool(meta and not meta.get("note"))
+    google_available = bool(google and not google.get("note"))
+
+    # ── Source availability banner ──────────────────────────────────────────────
+    source_pills = ""
+    sources = [("GA4", bool(ga4), "#2B5CE6"), ("Google Ads", google_available, "#0A8A62"),
+               ("Meta Ads", meta_available, "#1877F2"), ("TiendaNube", False, "#18A0D7")]
+    for src, active, col in sources:
+        bg = col if active else "#E4E8F0"
+        fc = "#fff" if active else "#8892A4"
+        label_txt = src if active else f"{src} (no disponible)"
+        source_pills += f'<span style="background:{bg};color:{fc};border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;margin-right:6px">{label_txt}</span>'
+
+    # ── Sessions by channel chart ───────────────────────────────────────────────
+    sessions_chart = svg_bar_chart(sessions_data[:8], metric_key="sessions",
+                                   color="#2B5CE6", label="Sesiones (últimos 30 días)")
+
+    # ── Engagement rate by channel ──────────────────────────────────────────────
+    eng_chart = svg_bar_chart(engagement_data[:8], metric_key="sessions",
+                              color="#0A8A62", label="Engagement Rate por Canal (%)", max_override=100)
+
+    # ── Device comparison table ─────────────────────────────────────────────────
+    device_html = ""
+    if device:
+        mobile_cvr  = device.get("mobile", 0)
+        desktop_cvr = device.get("desktop", 1)
+        tablet_cvr  = device.get("tablet")
+        ratio = mobile_cvr / desktop_cvr if desktop_cvr else 0
+        ratio_cls = "c-red" if ratio < 0.5 else ("c-amber" if ratio < 0.8 else "c-green")
+        ratio_diag = "CRÍTICO: mobile convierte 10x menos — revisar UX mobile urgente" if ratio < 0.3 else \
+                     ("Alerta: gap mobile/desktop significativo" if ratio < 0.5 else \
+                      ("Leve diferencia mobile/desktop" if ratio < 0.8 else "Sin gap significativo"))
+        dev_rows = f"""
+<tr><td style="font-weight:600">Desktop</td>
+  <td><span class="pill c-green">{desktop_cvr:.1f}%</span></td>
+  <td style="color:#8892A4">2.5–4.5%</td>
+  <td>Referencia base</td></tr>
+<tr><td style="font-weight:600">Mobile</td>
+  <td><span class="pill {ratio_cls}">{mobile_cvr:.1f}%</span></td>
+  <td style="color:#8892A4">1.2–2.0%</td>
+  <td style="font-weight:600;color:{'#D63B3B' if ratio < 0.5 else '#D08B00'}">{ratio_diag}</td></tr>"""
+        if tablet_cvr is not None:
+            dev_rows += f'<tr><td style="font-weight:600">Tablet</td><td><span class="pill c-amber">{tablet_cvr:.1f}%</span></td><td style="color:#8892A4">1.5–2.5%</td><td>—</td></tr>'
+        device_html = f"""<div class="chart-box" style="flex:1;min-width:280px">
+  <div class="chart-title">CVR por Dispositivo — Gap Mobile vs. Desktop</div>
+  <table class="fw-table"><thead><tr><th>Dispositivo</th><th>CVR</th><th>Benchmark</th><th>Diagnóstico</th></tr></thead>
+  <tbody>{dev_rows}</tbody></table>
+  <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:{'#FEF0F0' if ratio < 0.5 else '#FFFBF0'};font-size:11px;color:{'#D63B3B' if ratio < 0.5 else '#D08B00'};font-weight:600">
+    Ratio mobile/desktop: <strong>{ratio:.2f}x</strong> {'🔴' if ratio < 0.5 else '🟡'}
+  </div>
+</div>"""
+
+    # ── Paid vs Organic summary ─────────────────────────────────────────────────
+    paid_organic_rows = ""
+    # Organic from GA4
+    for ch in ga4_channels:
+        ch_name = ch.get("channel", "")
+        if any(k in ch_name.lower() for k in ["organic", "direct", "referral"]):
+            bounce_pct = float(ch.get("bounce", ch.get("bounce_rate", 0))) * 100 if float(ch.get("bounce", ch.get("bounce_rate", 0))) <= 1 else float(ch.get("bounce", 0))
+            eng_pct = round(100 - bounce_pct, 1)
+            sessions = int(ch.get("sessions", 0))
+            paid_organic_rows += f'<tr><td style="font-weight:600">{ch_name}</td><td style="text-align:right">{sessions:,}</td><td style="text-align:right">—</td><td style="text-align:right"><span class="pill {"c-green" if eng_pct > 50 else "c-amber"}">{eng_pct:.0f}%</span></td><td style="color:#8892A4;font-size:11px">Solo orgánico</td></tr>'
+    # Paid channels
+    if meta_available:
+        m_spend = meta.get("total_spend", meta.get("spend", 0))
+        m_roas  = meta.get("roas", meta.get("overall_roas", 0))
+        m_cvr   = meta.get("cvr", meta.get("overall_cvr", 0))
+        paid_organic_rows += f'<tr><td style="font-weight:600">Meta Ads (Paid Social)</td><td style="text-align:right">—</td><td style="text-align:right">${m_spend:,.0f}</td><td style="text-align:right"><span class="pill {"c-green" if m_cvr > 1.5 else "c-amber"}">{m_cvr:.1f}%</span></td><td style="color:#8892A4;font-size:11px">ROAS: {m_roas:.1f}x</td></tr>'
+    if google_available:
+        g_spend = google.get("spend", 0)
+        g_roas  = google.get("roas", 0)
+        g_cvr   = google.get("cvr", 0)
+        paid_organic_rows += f'<tr><td style="font-weight:600">Google Ads (Paid Search)</td><td style="text-align:right">—</td><td style="text-align:right">${g_spend:,.0f}</td><td style="text-align:right"><span class="pill {"c-green" if g_cvr > 1.5 else "c-amber"}">{g_cvr:.1f}%</span></td><td style="color:#8892A4;font-size:11px">ROAS: {g_roas:.1f}x</td></tr>'
+
+    channels_table = ""
+    if paid_organic_rows:
+        channels_table = f"""<div style="margin-top:24px">
+  <div class="chart-title">Comparativa de Canales: Orgánico vs. Pagado</div>
+  <table class="fw-table">
+    <thead><tr><th>Canal</th><th style="text-align:right">Sesiones</th><th style="text-align:right">Inversión</th><th style="text-align:right">Engagement</th><th>Nota</th></tr></thead>
+    <tbody>{paid_organic_rows}</tbody>
+  </table>
+</div>"""
+
+    # ── Attribution alerts from triangulation JSON (if present) ────────────────
+    alerts_html = ""
+    tri_path = Path(date).parent / "cro_triangulation.json" if False else Path("cro_triangulation.json")
+    if tri_path.exists():
+        tri = json.loads(tri_path.read_text())
+        alerts = tri.get("attribution_alerts", [])
+        if alerts:
+            alert_items = "".join(
+                f'<div style="padding:10px 14px;border-left:4px solid {"#D63B3B" if a.get("severity")=="critical" else "#D08B00"};background:{"#FEF0F0" if a.get("severity")=="critical" else "#FFFBF0"};border-radius:0 8px 8px 0;margin-bottom:8px;font-size:12px">'
+                f'<strong>{a.get("alert","")}</strong><br><span style="color:#4B5675">{a.get("impact","")}</span><br>'
+                f'<span style="color:#0A8A62;font-size:11px">→ {a.get("action","")}</span></div>'
+                for a in alerts
+            )
+            alerts_html = f'<div style="margin-top:24px"><div class="chart-title">Alertas de Atribución</div>{alert_items}</div>'
+
+    if not sessions_chart and not device_html:
+        return ""
+
+    return f"""<div class="page">
+  <div class="sec-header">
+    <div class="sec-num">5B</div>
+    <div class="sec-title">Triangulación Multifuentes</div>
+    <div class="sec-sub">GA4 + Google Ads + Meta Ads — comparativa integrada</div>
+  </div>
+  <div class="sec-body">
+    <div style="margin-bottom:20px">{source_pills}</div>
+
+    <div class="chart-row">
+      {'<div class="chart-box" style="flex:1;min-width:260px"><div class="chart-title">Tráfico por Canal</div>' + sessions_chart + '</div>' if sessions_chart else ''}
+      {'<div class="chart-box" style="flex:1;min-width:260px"><div class="chart-title">Engagement por Canal</div>' + eng_chart + '</div>' if eng_chart else ''}
+      {device_html}
+    </div>
+
+    {channels_table}
+    {alerts_html}
+  </div>
+  {footer(domain, date, "Triangulación Multifuentes")}
+</div>"""
+
+
 def page_recommendations(domain, date, recommendations):
     matrix  = svg_matrix(recommendations)
     legend  = svg_matrix_legend(recommendations)
@@ -1750,6 +1936,7 @@ def build_report(analyses, discovery, ga4, tn, paid, ab_plan, plugins, screensho
         page_frameworks(domain, date, analyses),
         page_data_dashboard(domain, date, ga4, tn),
         page_paid_media(domain, date, paid),
+        page_triangulation(domain, date, ga4, paid),
         page_recommendations(domain, date, recs),
         page_ab_plan(domain, date, ab_plan),
         page_plugins(domain, date, plugins),

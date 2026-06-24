@@ -1,16 +1,16 @@
 ---
 name: cro-expert
-description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via MCP — no property ID needed. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
+description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via analytics-mcp — no property ID needed. Cross-references GA4 + TiendaNube + Google Ads + Meta Ads to detect double attribution, channel efficiency gaps, and mobile CVR gaps. Produces a unified funnel from impression to real purchase and an attribution accuracy score. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
 license: MIT
 metadata:
-  version: 2.1.0
+  version: 2.3.0
   author: Lucio Monopoli
   email: inima.lucio@gmail.com
   agency: INIMA Interactive
   category: marketing
   domain: cro-ecommerce
   updated: 2026-06-24
-  tech-stack: analytics-mcp, Master-Metrics-MCP, WebFetch, Playwright
+  tech-stack: analytics-mcp, google-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
 ---
 
 # CRO Expert — E-commerce Conversion Audit
@@ -47,49 +47,70 @@ La última página del reporte se genera automáticamente y contiene:
 
 ## MCPs y fuentes de datos
 
-Este skill usa **2 MCPs** que cubren distintas fuentes. Antes de ejecutar el audit, verificá cuáles están activos.
+Este skill usa **4 MCPs independientes**. Cada uno es una fuente de datos directa — no hay dependencias entre ellos. La Phase 4.5 los cruza para detectar discrepancias. Antes de ejecutar el audit, verificá cuáles están activos.
+
+**Prioridad de fuente:** MCP dedicado → Master Metrics fallback → heurístico únicamente.
 
 ---
 
-### MCP 1 — `analytics-mcp` (Google Analytics 4)
+### MCP 1 — `analytics-mcp` (Google Analytics 4) ★ Principal
 
 **Fuente:** GA4 directo — funnel detallado, dimensiones custom, reportes de conversión.  
-**Herramientas:** `mcp__analytics-mcp__*`  
+**Herramientas:** `mcp__analytics-mcp__get_account_summaries`, `run_report`, `run_funnel_report`, `run_conversions_report`, `get_custom_dimensions_and_metrics`  
 **Verificar:** llamar `mcp__analytics-mcp__get_account_summaries` — si devuelve propiedades, está activo.  
-**Si falla con `invalid_grant`:** el OAuth expiró — el usuario debe re-autenticar analytics-mcp.  
+**Si falla con `invalid_grant`:** el OAuth expiró — el usuario debe correr `gcloud auth application-default login --client-id-file=<credentials.json> --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform` y luego `/mcp` → Reconnect.  
 **Fallback:** si no responde, usar Master Metrics `source: "google_analytics"` para GA4 básico.
 
 ---
 
-### MCP 2 — `Master Metrics` (hub multi-fuente)
+### MCP 2 — `google-ads-mcp` (Google Ads) ★ Principal
+
+**Fuente:** Google Ads API directo vía GAQL — campaña, ad group, keyword, device, quality score.  
+**Herramientas:** `mcp__google-ads-mcp__search` (GAQL), `mcp__google-ads-mcp__list_accessible_customers`, `mcp__google-ads-mcp__get_resource_metadata`  
+**Verificar:** llamar `mcp__google-ads-mcp__list_accessible_customers` — si devuelve customer IDs, está activo.  
+**Si falla:** verificar que `GOOGLE_ADS_DEVELOPER_TOKEN` y `GOOGLE_ADS_LOGIN_CUSTOMER_ID` estén configurados en `~/.claude/settings.json`.  
+**Fallback:** si no responde, usar Master Metrics `source: "google"` para Google Ads básico.
+
+---
+
+### MCP 3 — `tiendanube-mcp` (TiendaNube / Nuvemshop) ★ Principal — solo si el sitio usa TN
+
+**Fuente:** API de TiendaNube directo — orders, products, customers, coupons, store info.  
+**Herramientas:** `mcp__tiendanube-mcp__list_orders`, `list_products`, `list_customers`, `get_store`  
+**Verificar:** llamar `mcp__tiendanube-mcp__get_store` — si devuelve datos de la tienda, está activo.  
+**Requiere:** Docker corriendo localmente (`docker-compose up -d` en el directorio del MCP).  
+**Si falla:** usar Master Metrics `source: "tiendanube"` como fallback.  
+**Si no es TiendaNube:** saltear esta fuente — usar GA4 Enhanced E-commerce para datos de ventas.
+
+---
+
+### MCP 4 — `Master Metrics` (hub multi-fuente) — Fallback + Meta Ads
 
 **Herramientas:** `mcp__claude_ai_Master_Metrics__*`  
-**Verificar:** llamar `mcp__claude_ai_Master_Metrics__get_available_sources` — devuelve las fuentes conectadas.
+**Rol en este skill:** fallback para GA4/Google Ads/TiendaNube cuando los MCPs dedicados no están disponibles, Y fuente primaria para **Meta Ads** (Facebook + Instagram).  
+**Verificar:** llamar `mcp__claude_ai_Master_Metrics__get_available_sources`.
 
-Master Metrics es un hub que agrega múltiples fuentes en una sola API. Las fuentes **no son fijas** — varían por usuario. Antes de asumir qué datos hay disponibles, verificá:
-
-```
-mcp__claude_ai_Master_Metrics__get_available_sources
-```
-
-**Fuentes comunes que pueden estar disponibles:**
-
-| source | Datos | Para quién |
+| source | Rol | Cuándo usar |
 |---|---|---|
-| `google` | Google Ads — spend, ROAS, CPA, CVR por campaña | Cualquier anunciante |
-| `google_analytics` | GA4 — sessions, CVR, bounce (datos básicos) | Cualquiera con GA4 |
-| `meta` | Meta Ads — Facebook + Instagram, ROAS, CPA, funnel paid | Cualquier anunciante |
-| `pinterest` | Pinterest Ads | Si usan Pinterest Ads |
-| `youtube` | YouTube Ads | Si usan YouTube Ads |
-| `tiendanube` | Tiendanube — pedidos, abandono, ticket, UTM | **Solo stores TiendaNube** |
+| `google_analytics` | Fallback GA4 | Solo si `analytics-mcp` falla |
+| `google` | Fallback Google Ads | Solo si `google-ads-mcp` falla |
+| `meta` | **Primario** Meta Ads | Siempre (no hay MCP dedicado de Meta) |
+| `tiendanube` | Fallback TN | Solo si `tiendanube-mcp` falla |
+| `pinterest`, `youtube` | Opcional | Si el cliente usa estas plataformas |
 
-**Importante:** TiendaNube es UNA fuente opcional. La mayoría de los datos útiles para cualquier e-commerce vienen de `google`, `meta`, y `google_analytics`.
+---
 
-### Si los MCPs no responden
+### Matriz de disponibilidad y fallback
 
-- `analytics-mcp` falla → usar `Master Metrics source: "google_analytics"` como fallback; si tampoco hay, análisis visual/heurístico únicamente
-- `Master Metrics` falla → saltear Phases 4B y 4C; reportar al usuario
-- El reporte se genera siempre — con o sin datos reales
+| Fuente de datos | MCP primario | Fallback | Sin ninguno |
+|---|---|---|---|
+| Google Analytics 4 | `analytics-mcp` | Master Metrics `google_analytics` | Solo heurístico |
+| Google Ads | `google-ads-mcp` | Master Metrics `google` | Phase 4B-Google skipped |
+| Meta Ads | Master Metrics `meta` | — | Phase 4B-Meta skipped |
+| TiendaNube | `tiendanube-mcp` | Master Metrics `tiendanube` | GA4 e-commerce usado |
+| Pinterest / YouTube | Master Metrics | — | Not shown |
+
+**El reporte se genera siempre** — con o sin datos. Cada sección indica qué fuente usó o por qué fue omitida.
 
 ---
 
@@ -123,10 +144,14 @@ Also collect:
 ## PHASE 1: Visual Capture
 
 For each discovered page:
-1. Use the `browse` skill to take a **full-page screenshot** at 1440px width (desktop)
+1. Use the `browse` skill to take a **viewport-only screenshot (first scroll only — NOT full-page)** at 1440x900px (desktop)
+   - Command: `$B viewport 1440x900 && $B goto <url> && $B wait --networkidle && $B screenshot --viewport <path>`
    - Save as `screenshot_<page>_desktop.png` (e.g. `screenshot_pdp_desktop.png`)
-2. Take a **second screenshot** at 390px width (mobile)
+2. Take a **second viewport-only screenshot** at 390x844px (mobile)
+   - Command: `$B viewport 390x844 && $B screenshot --viewport <path>`
    - Save as `screenshot_<page>_mobile.png`
+   - **Always use `--viewport` flag** — full-page screenshots are NOT used in CRO reports
+   - **Always wait `--networkidle`** before capturing to avoid blank/unrendered screenshots
 3. Identify 3–5 CRO issues visible in the screenshot and for each one:
    - Write a numbered callout text (for the `callouts` array)
    - Estimate its **approximate position** in the screenshot as x/y percentages (for `callout_markers`)
@@ -326,179 +351,474 @@ Una vez con todos los datos:
 
 ---
 
-## PHASE 4B: Paid Media via Master Metrics (Google Ads + Meta Ads)
+## PHASE 4B: Google Ads via `google-ads-mcp`
 
-Esta fase responde la pregunta clave del performance marketing: **¿el problema está en el ad o en la landing page?**
+Esta fase responde la pregunta clave del performance marketing: **¿el problema está en el ad o en la landing page?**  
+Usa `google-ads-mcp` como fuente primaria (GAQL directo). Si no está disponible, cae a Master Metrics `source: "google"`.
 
-Funciona para **cualquier e-commerce** — no requiere TiendaNube.
+---
 
-### PM-0 — Verificar fuentes disponibles
+### GAds-0 — Auto-discovery de cuentas
 
-Antes de correr esta fase:
-1. Llama `mcp__claude_ai_Master_Metrics__get_available_sources` para ver qué fuentes están conectadas.
-2. Identifica cuáles de `google`, `meta`, `pinterest`, `youtube` están disponibles.
-3. Corre solo las sub-fases para las fuentes que existen. Si ninguna está disponible, saltear esta fase.
+```
+mcp__google-ads-mcp__list_accessible_customers
+```
 
-### PM-1 — Auto-discovery de cuentas
+Devuelve todos los customer IDs accesibles. Si hay un manager account (MCC), usar ese customer ID en `GOOGLE_ADS_LOGIN_CUSTOMER_ID` para acceder a las cuentas hijas.
 
-En paralelo (solo para fuentes disponibles según PM-0):
-1. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "meta"` → lista cuentas Meta (si disponible)
-2. `mcp__claude_ai_Master_Metrics__get_accounts` con `source: "google"` → lista cuentas Google (si disponible)
+Identifica el customer ID que corresponde al sitio auditado (por nombre o dominio). Si hay múltiples, mostrarle la lista al usuario y pedir que elija.
 
-Si el dominio auditado coincide con el nombre de una cuenta, úsala. Si hay múltiples, pregunta al usuario.
+---
 
-### PM-2 — Performance Meta Ads (últimos 30d)
+### GAds-1 — Performance de campañas (últimos 30d)
+
+Usa `mcp__google-ads-mcp__search` con GAQL:
+
+```sql
+SELECT
+  campaign.name,
+  campaign.status,
+  metrics.cost_micros,
+  metrics.clicks,
+  metrics.impressions,
+  metrics.conversions,
+  metrics.conversions_value,
+  metrics.average_cpc,
+  metrics.conversion_rate,
+  metrics.cost_per_conversion,
+  metrics.ctr
+FROM campaign
+WHERE segments.date DURING LAST_30_DAYS
+  AND campaign.status = 'ENABLED'
+ORDER BY metrics.cost_micros DESC
+LIMIT 20
+```
+
+Calcular (dividir `cost_micros` y `conversions_value` por 1,000,000):
+- **Spend total** y por campaña
+- **ROAS** = `conversions_value / cost` por campaña
+- **CPA** = `cost / conversions`
+- **CTR** = `clicks / impressions`
+- Identifica top 3 campañas por spend y top 3 por ROAS
+
+---
+
+### GAds-2 — Performance por device (CVR mobile vs. desktop)
+
+```sql
+SELECT
+  campaign.name,
+  segments.device,
+  metrics.clicks,
+  metrics.conversions,
+  metrics.conversion_rate,
+  metrics.cost_micros,
+  metrics.cost_per_conversion
+FROM campaign
+WHERE segments.date DURING LAST_30_DAYS
+  AND campaign.status = 'ENABLED'
+ORDER BY metrics.clicks DESC
+LIMIT 60
+```
+
+Agrupa por `segments.device` (MOBILE, DESKTOP, TABLET).  
+Calcula ratio CVR mobile / CVR desktop → si < 0.5, marcar como crítico.
+
+---
+
+### GAds-3 — Landing page quality score (por keyword)
+
+```sql
+SELECT
+  ad_group_criterion.keyword.text,
+  ad_group_criterion.keyword.match_type,
+  metrics.historical_landing_page_quality_score,
+  metrics.historical_quality_score,
+  metrics.clicks,
+  metrics.conversions,
+  metrics.average_cpc
+FROM keyword_view
+WHERE segments.date DURING LAST_30_DAYS
+  AND metrics.clicks > 10
+ORDER BY metrics.clicks DESC
+LIMIT 30
+```
+
+`historical_landing_page_quality_score` puede ser: `BELOW_AVERAGE`, `AVERAGE`, `ABOVE_AVERAGE`.  
+Si la mayoría de keywords de alto volumen tienen `BELOW_AVERAGE` → Google penaliza la landing con menos impresiones y CPC más alto. Marcar como alerta crítica.
+
+---
+
+### GAds-4 — Fallback a Master Metrics (si google-ads-mcp no disponible)
+
+Si `mcp__google-ads-mcp__list_accessible_customers` falla, usar:
+```
+mcp__claude_ai_Master_Metrics__get_data  source: "google"
+metrics: [spend, clicks, conversions, conversions_value, cost_per_conversion, conversion_rate, historical_landing_page_quality_score]
+dimensions: [campaign.name, segments.device]
+```
+Documentar en el reporte que los datos vienen de Master Metrics (no GAQL directo).
+
+---
+
+## PHASE 4B-META: Meta Ads via Master Metrics
+
+Meta Ads no tiene MCP dedicado — se obtiene siempre via Master Metrics `source: "meta"`.
+
+### META-0 — Verificar disponibilidad
+
+```
+mcp__claude_ai_Master_Metrics__get_available_sources
+```
+Si `meta` no aparece → saltear esta sub-fase y documentarlo.
+
+### META-1 — Performance Meta Ads (últimos 30d)
 
 Usa `mcp__claude_ai_Master_Metrics__get_data`:
 ```
 source: "meta"
 metrics:
-  - spend                                              ← inversión total
-  - link_clicks                                        ← clics al sitio
-  - cpc_link_clicks                                    ← CPC real
-  - conversion_offsite_conversion.fb_pixel_purchase    ← compras atribuidas
-  - conversion_offsite_conversion.fb_pixel_purchase_value ← revenue atribuido
-  - conversion_cost_offsite_conversion.fb_pixel_purchase  ← CPA
-  - purchase_roas                                      ← ROAS
-  - conversion_offsite_conversion.fb_pixel_add_to_cart    ← ATC desde Meta
-  - conversion_offsite_conversion.fb_pixel_initiate_checkout ← checkouts Meta
-  - conversion_offsite_conversion.fb_pixel_view_content    ← vistas de producto
+  - spend
+  - link_clicks
+  - cpc_link_clicks
+  - conversion_offsite_conversion.fb_pixel_purchase
+  - conversion_offsite_conversion.fb_pixel_purchase_value
+  - conversion_cost_offsite_conversion.fb_pixel_purchase
+  - purchase_roas
+  - conversion_offsite_conversion.fb_pixel_add_to_cart
+  - conversion_offsite_conversion.fb_pixel_initiate_checkout
+  - conversion_offsite_conversion.fb_pixel_view_content
 dimensions:
   - campaign
-  - publisher_platform      ← Facebook vs Instagram
-  - device_platform         ← mobile vs desktop
+  - publisher_platform
+  - device_platform
 ```
 
 Calcular:
 - **CVR Meta** = `fb_pixel_purchase / link_clicks` × 100
-- **Funnel Meta**: link_clicks → view_content → add_to_cart → initiate_checkout → purchase + drop-off % en cada paso
-- ROAS por campaña (identifica campañas rentables vs. no rentables)
-- CPA real vs. ticket promedio TN = margen de adquisición
-
-### PM-3 — Performance Google Ads (últimos 30d)
-
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
-```
-source: "google"
-metrics:
-  - metrics.spend
-  - metrics.clicks
-  - metrics.conversions
-  - metrics.conversions_value
-  - metrics.google_purchase_roas    ← ROAS
-  - metrics.cost_per_conversion     ← CPA
-  - metrics.average_cpc
-  - metrics.conversion_rate
-  - metrics.average_order_value_micros ← AOV (dividir por 1,000,000)
-  - metrics.historical_landing_page_quality_score ← calidad de landing
-dimensions:
-  - campaign.name
-  - segments.device
-```
-
-Presta atención especial a `historical_landing_page_quality_score` — si es bajo, Google está penalizando las landing pages con menos impresiones y mayor CPC.
-
-### PM-4 — Diagnóstico ad vs. landing page
-
-Con los datos de ambas fuentes, responde:
-
-| Señal | Diagnóstico | Acción |
-|---|---|---|
-| CTR alto + CVR bajo | Landing page no convierte lo que el ad promete | Audit de message match |
-| CTR bajo + CVR normal | El ad no está atrayendo al público correcto | Problema de targeting/creativo |
-| ROAS < 1 + CVR normal | CPC muy alto o ticket muy bajo | Problema de bidding/precio |
-| Mobile CTR alto + Mobile CVR muy bajo | UX mobile de la landing page | mobile audit |
-| Landing page quality score < 5/10 | Google penaliza la página | Mejoras de relevancia y UX |
-| CPA > AOV (ticket promedio) | Adquisición no es rentable | Revisar AOV o funnel post-click |
-
-### PM-5 — Revenue atribuido vs. revenue real (si hay datos de plataforma)
-
-Si hay datos de ventas reales (Tiendanube u otra fuente):
-- Cruza revenue atribuido Meta + Google vs. revenue real de la plataforma
-- Si la suma de paid supera el total → hay doble atribución
-- Si solo hay GA4: compará `conversions_value` de GA4 vs. `conversions_value` de cada plataforma paid
+- **Funnel Meta**: link_clicks → view_content → add_to_cart → initiate_checkout → purchase
+- ROAS por campaña · CPA real vs. ticket promedio
 
 ---
 
-## PHASE 4C: Datos de plataforma e-commerce (CONDICIONAL — solo si disponible)
+### PM-DIAG — Diagnóstico ad vs. landing page (Google + Meta combinados)
 
-Esta fase solo corre si Master Metrics tiene conectada una fuente de e-commerce que coincida con la plataforma del sitio auditado.
+Con los datos de ambas fuentes:
 
-### Plataformas soportadas actualmente
-
-| Plataforma | Source en Master Metrics | Datos disponibles |
+| Señal | Diagnóstico | Acción |
 |---|---|---|
-| Tiendanube | `tiendanube` | Pedidos, abandono, ticket, UTM, pasarelas, top productos |
-| Otras (Shopify, WooCommerce, etc.) | No disponible aún en Master Metrics | Usar GA4 enhanced e-commerce |
+| CTR alto + CVR bajo | Landing no convierte lo que el ad promete | Audit de message match |
+| CTR bajo + CVR normal | Ad no atrae al público correcto | Problema de targeting/creativo |
+| ROAS < 1 + CVR normal | CPC muy alto o ticket muy bajo | Revisar bidding/precio |
+| Mobile CTR alto + Mobile CVR < 0.5× desktop | UX mobile de la landing | Mobile audit |
+| Landing page quality `BELOW_AVERAGE` generalizado | Google penaliza la página | Mejoras de relevancia y UX |
+| CPA > AOV | Adquisición no rentable | Revisar AOV o funnel post-click |
+| ROAS Google + ROAS Meta imposible vs. revenue TN | Doble atribución | → Phase 4.5 TRI-1 |
 
-### EC-0 — Verificar si aplica
+---
 
-1. Detectar la plataforma del sitio (en Phase 0: tech stack detection).
-2. Si es Tiendanube: buscar en Master Metrics `source: "tiendanube"` una tienda con dominio coincidente.
-3. Si se encuentra: correr EC-1 a EC-6.
-4. Si no es Tiendanube o no se encuentra la tienda: **saltear esta fase completa** y documentar en el reporte que los datos de plataforma no están disponibles. Para Shopify/WooCommerce, los datos de e-commerce vienen de GA4 Enhanced E-commerce.
+## PHASE 4C: Datos de plataforma e-commerce
 
-### EC-1 — KPIs de ventas TiendaNube (últimos 30d)
+Usa `tiendanube-mcp` como fuente primaria si el sitio es TiendaNube. Para otras plataformas, usa GA4 Enhanced E-commerce (ya capturado en Phase 4).
 
-Usa `mcp__claude_ai_Master_Metrics__get_data`:
+### EC-0 — Verificar plataforma y disponibilidad del MCP
+
+1. En Phase 0 ya detectaste el tech stack. Si es TiendaNube:
+   - **Ruta A (primaria):** llamar `mcp__tiendanube-mcp__get_store` — si responde, está activo. Seguir con EC-1a.
+   - **Ruta B (fallback):** si `tiendanube-mcp` no responde, intentar `mcp__claude_ai_Master_Metrics__get_available_sources` y verificar que `tiendanube` esté disponible. Seguir con EC-1b.
+2. Si no es TiendaNube: **saltear esta fase** y documentar que los datos de plataforma vienen de GA4 Enhanced E-commerce (ya capturado en Phase 4D).
+
+---
+
+### EC-1a — KPIs de ventas vía `tiendanube-mcp` (Ruta A — primaria)
+
+#### Pedidos recientes (últimos 30 días)
 ```
-source: "tiendanube"
-accounts: [<account_id>]
-metrics:
-  - tn_orders_sold_count
-  - tn_orders_total
-  - tn_orders_average_sales_ticket
-  - tn_checkouts_count
-  - tn_orders_abandoned_count
-  - tn_customers_count
-dimensions:
-  - month
+mcp__tiendanube-mcp__list_orders
+params: {
+  "per_page": 200,
+  "created_at_min": "<ISO date 30 days ago>",
+  "status": "paid,closed"
+}
+```
+Repetir paginando hasta obtener todos los pedidos del período.
+
+Calcular manualmente:
+- **Total orders** = count de pedidos
+- **Revenue total** = suma de `total` en cada pedido
+- **Ticket promedio** = revenue / orders
+- **Distribución por día/semana** para detectar estacionalidad
+
+#### Pedidos abandonados (estado `abandoned`)
+```
+mcp__tiendanube-mcp__list_orders
+params: {
+  "per_page": 200,
+  "created_at_min": "<ISO date 30 days ago>",
+  "status": "abandoned"
+}
+```
+- **Tasa de abandono** = orders_abandoned / (orders_paid + orders_abandoned) × 100 (benchmark: 60–75%)
+- **Revenue perdido** = suma de totales abandonados — mostrar como bloque destacado en el reporte
+
+#### Atribución UTM real (de los pedidos pagados)
+Extraer de cada pedido los campos `utm_source`, `utm_medium`, `utm_campaign` y agregar:
+- Revenue y cantidad de pedidos por canal UTM
+- Cruza con GA4 sessions por canal → detecta canales con alto tráfico pero bajo revenue real
+
+---
+
+### EC-2a — Top productos vía `tiendanube-mcp`
+
+```
+mcp__tiendanube-mcp__list_products
+params: {
+  "per_page": 50
+}
 ```
 
-Calcular:
-- **Tasa de abandono** = `tn_orders_abandoned_count / tn_checkouts_count` × 100 (benchmark: 60–75%)
-- **Revenue perdido en abandono** en $ — incluir en el reporte como bloque destacado
-- Delta % vs. período anterior
+Para los productos con más ventas en el período, comparar con lo que muestra la home. ¿La home prioriza los productos más vendidos? Si no, es un problema de merchandising.
 
-### EC-2 — Atribución UTM
+---
+
+### EC-3a — Clientes: nuevos vs. recurrentes vía `tiendanube-mcp`
 
 ```
-source: "tiendanube"
+mcp__tiendanube-mcp__list_customers
+params: {
+  "per_page": 50
+}
+```
+
+Cruzar con los pedidos: contar customers con > 1 pedido en el período.  
+Si el ticket de recurrentes > 40% del ticket de nuevos → el sitio necesita mensajes diferenciados por segmento.
+
+---
+
+### EC-1b — KPIs de ventas vía Master Metrics (Ruta B — fallback)
+
+Si `tiendanube-mcp` no está disponible, usar Master Metrics con los mismos datos:
+
+```
+mcp__claude_ai_Master_Metrics__get_data  source: "tiendanube"
+metrics: [tn_orders_sold_count, tn_orders_total, tn_orders_average_sales_ticket,
+          tn_checkouts_count, tn_orders_abandoned_count, tn_customers_count]
+dimensions: [month]
+```
+
+**Abandono por pasarela** (solo disponible en Master Metrics, no en `tiendanube-mcp`):
+```
+metrics: [tn_checkouts_count, tn_checkouts_total]  dimensions: [tn_checkouts_gateway]
+```
+Si una pasarela concentra > 40% del abandono → bug/fricción técnica, prioridad crítica.
+
+**UTM por pedido** (solo Master Metrics):
+```
 metrics: [tn_orders_sold_count, tn_orders_total]
 dimensions: [tn_orders_utm_source, tn_orders_utm_medium, tn_orders_utm_campaign]
 ```
 
-Cruza con GA4 sessions por canal: detecta canales con alto tráfico pero bajo revenue real.
+Documentar en el reporte que los datos vienen de Master Metrics (no API directa de TN).
 
-### EC-3 — Abandono por pasarela de pago
+---
+
+## PHASE 4.5: Triangulación Multicanal
+
+Esta fase cruza GA4 + TiendaNube + Google Ads en una vista unificada. Es la sección más diferenciadora del reporte — muestra discrepancias de atribución, gaps de conversión por canal, y la eficiencia real de cada fuente de tráfico.
+
+Corre esta fase **después** de 4B, 4C y 4G (cuando ya tenés todos los datos). Si falta alguna fuente, armá la triangulación con lo que haya y documentá los gaps.
+
+---
+
+### TRI-1 — Validación de Revenue (¿cuánto vendiste realmente?)
+
+El objetivo es detectar **doble atribución** y encontrar el revenue verdadero.
+
+| Fuente | Revenue reportado | Diferencia vs. TN |
+|--------|------------------|-------------------|
+| TiendaNube (fuente de verdad) | `tn_orders_total` | — |
+| GA4 (`purchaseRevenue`) | GA4 value | Δ% vs. TN |
+| Google Ads (conversions_value) | GA4/GAdwords value | Δ% vs. TN |
+| Meta Ads (fb_pixel_purchase_value) | Meta value | Δ% vs. TN |
+| **Suma paid** | Google + Meta | Si > TN → hay solapamiento |
+
+**Reglas de interpretación:**
+- Si GA4 < TN en > 15% → hay ventas sin tracking (directo, offline, sesiones expiradas)
+- Si GA4 > TN → hay conversiones duplicadas o mal configuradas
+- Si suma(Google + Meta) > TN × 0.9 → hay doble atribución severa entre plataformas
+- Si suma(Google + Meta) > TN → el ROAS combinado es ficticio — reportarlo como alerta crítica
+
+Guarda esto en `cro_triangulation.json` bajo `"revenue_validation"`.
+
+---
+
+### TRI-2 — Matriz de Eficiencia por Canal
+
+Construye una tabla unificando GA4 (sesiones, CVR) + Google Ads (spend, CPA) + TiendaNube (pedidos reales por UTM).
+
+Para cada canal disponible (`Organic Search`, `Paid Search`, `Paid Social`, `Direct`, `Email`, `Referral`):
 
 ```
-source: "tiendanube"
-metrics: [tn_checkouts_count, tn_checkouts_total]
-dimensions: [tn_checkouts_gateway]
+Canal | Sesiones GA4 | CVR GA4 | Pedidos TN (UTM) | Spend | CPA real | ROAS real
 ```
 
-Si una pasarela concentra > 40% del abandono → es un bug/fricción técnica, prioridad crítica.
+**CPA real** = spend / pedidos TN (no conversiones declaradas por la plataforma)  
+**ROAS real** = revenue TN atribuido a ese canal / spend
 
-### EC-4 — Top productos
+**Alertas automáticas:**
+- Canal con CVR GA4 alto pero pedidos TN bajos → problema de tracking UTM o atribución
+- Canal con ROAS plataforma > 3 pero ROAS real < 1 → la plataforma está reclamando ventas de otros canales
+- Organic con CVR > Paid → el contenido orgánico convierte mejor que el paid; revisar landing pages de ads
+- Direct muy alto (> 25% sesiones) → posible pérdida de UTM en redirects o links sin tag
+
+Guarda en `cro_triangulation.json` bajo `"channel_matrix"`.
+
+---
+
+### TRI-3 — Gap de Conversión Mobile vs. Desktop
+
+Cruza las tres fuentes para diagnosticar si el problema mobile es de UX, de tráfico, o de atribución:
 
 ```
-source: "tiendanube"
-metrics: [tn_productOrders_quantity, tn_productOrders_subtotal]
-dimensions: [tn_productOrders_name_without_variants, tn_productOrders_category]
+Device   | CVR GA4 | CVR Google Ads | Abandono TN | Sesiones GA4 | Spend Google
+---------|---------|---------------|-------------|--------------|-------------
+Mobile   |         |               |             |              |
+Desktop  |         |               |             |              |
+Tablet   |         |               |             |              |
 ```
 
-¿La home prioriza los productos que más convierten? Si no, es un problema de merchandising.
+**Diagnóstico por combinación:**
 
-### EC-5 — Nuevos vs. recurrentes
+| CVR GA4 mobile / desktop | CVR Google mobile / desktop | Diagnóstico |
+|--------------------------|----------------------------|-------------|
+| < 0.4 | < 0.4 | Problema UX mobile global — prioridad máxima |
+| < 0.4 | ≈ 0.8–1.0 | El problema es el sitio, no el ad — landing page mobile |
+| ≈ 0.8–1.0 | < 0.4 | El problema es el targeting/creativo mobile de Google |
+| > 0.7 | > 0.7 | Sin gap significativo — buscar otras prioridades |
+
+Si CVR mobile GA4 < 40% del CVR desktop → marcar como **CRÍTICO** en el reporte.
+
+Guarda en `cro_triangulation.json` bajo `"mobile_gap"`.
+
+---
+
+### TRI-4 — Funnel Unificado (de impresión a compra real)
+
+Construye el funnel completo cruzando las tres fuentes:
 
 ```
-source: "tiendanube"
-metrics: [tn_orders_sold_count, tn_orders_total, tn_orders_average_sales_ticket]
-dimensions: [tn_orders_recurrent]
+Paso                    | Fuente       | Usuarios/Eventos | Drop-off
+------------------------|--------------|------------------|----------
+Impresiones (reach)     | Google+Meta  | —                | —
+Clics al sitio          | Google+Meta  | X                | —
+Sesiones                | GA4          | Y (Y/X = aterrizaje%) | —
+Vieron producto (PDP)   | GA4          | Z                | (Y-Z)/Y %
+Agregaron al carrito    | GA4 + TN     | A                | (Z-A)/Z %
+Iniciaron checkout      | GA4 + TN     | B                | (A-B)/A %
+Completaron compra      | TN (verdad)  | C                | (B-C)/B %
 ```
 
-Si ticket de recurrentes > 40% del ticket de nuevos → el sitio necesita mensajes diferenciados por segmento.
+**Benchmark por paso:**
+- Clics → Sesiones: > 85% (si < 80% → problema de tracking o redirects)
+- Sesiones → PDP: > 55% (si < 40% → home/categoría no engancha)
+- PDP → ATC: 8–15% (si < 6% → problema de PDP: precio, imágenes, copy)
+- ATC → Checkout: 40–60% (si < 35% → fricción en carrito)
+- Checkout → Compra: 50–70% (si < 45% → fricción en checkout o pasarela)
+
+El paso con mayor drop-off relativo al benchmark es la **prioridad #1 del audit** — debe aparecer como primer item en la Hoja de Conclusiones.
+
+Guarda en `cro_triangulation.json` bajo `"unified_funnel"`.
+
+---
+
+### TRI-5 — Diagnóstico de Atribución (tabla de alertas)
+
+Genera automáticamente una tabla de alertas de atribución para incluir en el reporte:
+
+```json
+[
+  {
+    "alert": "Doble atribución Google + Meta",
+    "severity": "critical|warning|info",
+    "data": "Google claims $X + Meta claims $Y = $Z > TN actual $W",
+    "impact": "El ROAS combinado está inflado en X%",
+    "action": "Usar data-driven attribution en GA4 como fuente de verdad"
+  }
+]
+```
+
+---
+
+### Contrato de datos `cro_triangulation.json`
+
+```json
+{
+  "generated_at": "ISO timestamp",
+  "sources_available": ["ga4", "tiendanube", "google_ads", "meta_ads"],
+  "revenue_validation": {
+    "tiendanube_actual": 48720,
+    "ga4_reported": 45100,
+    "google_ads_claimed": 28400,
+    "meta_ads_claimed": 22100,
+    "paid_sum": 50500,
+    "double_attribution_detected": true,
+    "double_attribution_amount": 1780,
+    "ga4_gap_pct": -7.4,
+    "notes": "Suma paid supera revenue TN en $1,780 — ROAS de ambas plataformas está inflado"
+  },
+  "channel_matrix": [
+    {
+      "channel": "Paid Search",
+      "sessions_ga4": 12400,
+      "cvr_ga4": 2.8,
+      "orders_tn": 285,
+      "revenue_tn": 17100,
+      "spend": 4200,
+      "cpa_real": 14.7,
+      "roas_real": 4.07,
+      "roas_platform": 6.8,
+      "alert": "ROAS plataforma 67% mayor al ROAS real — doble atribución con Meta"
+    }
+  ],
+  "mobile_gap": {
+    "mobile_cvr_ga4": 1.1,
+    "desktop_cvr_ga4": 3.2,
+    "mobile_desktop_ratio": 0.34,
+    "mobile_cvr_google": 1.8,
+    "desktop_cvr_google": 3.1,
+    "google_mobile_desktop_ratio": 0.58,
+    "diagnosis": "UX mobile crítico — el problema está en el sitio, no en los ads",
+    "severity": "critical"
+  },
+  "unified_funnel": {
+    "impressions": 180000,
+    "clicks_paid": 8200,
+    "sessions_ga4": 45230,
+    "view_item": 28400,
+    "add_to_cart": 4250,
+    "begin_checkout": 1820,
+    "purchase_tn": 812,
+    "drop_offs": {
+      "clicks_to_sessions_pct": 91.2,
+      "sessions_to_pdp_pct": 37.2,
+      "pdp_to_atc_pct": 15.0,
+      "atc_to_checkout_pct": 42.8,
+      "checkout_to_purchase_pct": 44.6
+    },
+    "biggest_drop": "checkout_to_purchase",
+    "biggest_drop_vs_benchmark": "44.6% vs benchmark 50–70% — 6 puntos bajo mínimo"
+  },
+  "attribution_alerts": [
+    {
+      "alert": "Doble atribución detectada",
+      "severity": "critical",
+      "data": "Google Ads + Meta Ads reclaman $50,500 sobre $48,720 de ventas reales en TN",
+      "impact": "ROAS combinado inflado — decisiones de inversión basadas en datos incorrectos",
+      "action": "Activar data-driven attribution en GA4 y usar como árbitro único"
+    }
+  ]
+}
+```
 
 ---
 
@@ -553,6 +873,14 @@ For each page (Home → PLP → PDP → Cart → Checkout):
 - **Meta Ads**: ROAS, CPA, CVR post-click por campaña, funnel paid (click→ATC→checkout→purchase)
 - **Google Ads**: ROAS, CPA, landing page quality score, CVR por device
 - **Diagnóstico paid vs. organic**: tabla de señales ad vs. landing page con acción recomendada
+
+**Page 5B — Triangulación Multicanal** *(sección nueva — solo si hay 2+ fuentes de datos)*
+- **Validación de revenue**: tabla comparando TN (fuente de verdad) vs. GA4 vs. Google Ads vs. Meta — con alerta de doble atribución si suma paid > revenue real
+- **Matriz de eficiencia por canal**: canal / sesiones GA4 / CVR GA4 / pedidos TN reales / spend / CPA real / ROAS real vs. ROAS declarado — con alertas de discrepancia
+- **Gap mobile**: tabla 3×4 (mobile/desktop/tablet × CVR GA4 / CVR Google Ads / abandono TN / sesiones) + diagnóstico automático (¿el problema es UX, ads o tracking?)
+- **Funnel unificado** de impresión a compra real: barras decrecientes con % de drop-off en cada paso vs. benchmark, marcando el cuello de botella principal en rojo
+- **Alertas de atribución**: lista de discrepancias detectadas con severidad, impacto en $ y acción recomendada
+- Si hay solo GA4 sin paid o sin TN → mostrar las secciones disponibles y documentar los gaps
 
 **Page 7 — A/B Test Plan**
 - Tabla resumen de 3–5 tests priorizados por impacto × esfuerzo

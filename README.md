@@ -7,14 +7,15 @@ Built by [Lucio Monopoli](mailto:inima.lucio@gmail.com) · [INIMA Interactive](h
 
 ## What it does
 
-Run `/cro-expert https://your-store.com` in Claude Code and get a **professional 9-page HTML/PDF audit report** covering:
+Run `/cro-expert https://your-store.com` in Claude Code and get a **professional 10-page HTML/PDF audit report** covering:
 
 - Visual screenshots (desktop + mobile) with **numbered callout markers overlaid** on each page
 - 4Ps · AIDA · Cialdini · Nielsen framework analysis
-- Real GA4 funnel data — auto-discovered by domain, no property ID needed
-- Google Ads performance via Master Metrics — ROAS, CPA, CVR, landing page quality
-- Meta Ads performance via Master Metrics — ROAS, CPA, paid funnel by campaign
-- E-commerce platform data (Tiendanube if connected, GA4 enhanced e-commerce otherwise)
+- Real GA4 funnel data — auto-discovered by domain via `analytics-mcp`, no property ID needed
+- Google Ads via `google-ads-mcp` — GAQL queries for ROAS, CPA, CVR by device, landing page quality score per keyword
+- Meta Ads via Master Metrics — ROAS, CPA, paid funnel by campaign and platform (Facebook vs. Instagram)
+- TiendaNube data via `tiendanube-mcp` — real orders, abandoned carts, UTM attribution, top products
+- **Multi-source triangulation** — cross-references all 4 sources to detect double attribution, real vs. claimed ROAS, and mobile CVR gaps
 - Priority matrix with Impact × Effort recommendations
 - A/B test plan with sample size calculations
 - Plugin recommendations ranked by CVR impact
@@ -22,7 +23,7 @@ Run `/cro-expert https://your-store.com` in Claude Code and get a **professional
 
 The report is a **self-contained HTML file** (inline screenshots with visual annotations, SVG charts, no external dependencies). Works offline, converts to PDF.
 
-**Works for any e-commerce platform** — Shopify, WooCommerce, VTEX, Tiendanube, Magento, custom. The only Tiendanube-specific section is optional and only appears if your Master Metrics account has a Tiendanube store connected.
+**Works for any e-commerce platform** — Shopify, WooCommerce, VTEX, Tiendanube, Magento, custom. Each data source degrades gracefully if unavailable — the report always generates.
 
 ---
 
@@ -50,91 +51,136 @@ python3 -m playwright install chromium
 
 ## MCP Configuration
 
-This skill uses **2 MCPs**. You don't need both — each one you connect adds a richer data section to the report.
+This skill uses **4 independent MCPs**. Each adds a richer data layer. You don't need all four — the report always generates with whatever is available.
 
 ---
 
 ### MCP 1 — `analytics-mcp` (Google Analytics 4)
 
-**What it unlocks:** Full GA4 funnel report (session → view_item → add_to_cart → checkout → purchase), CVR by device, bounce rate by page, drop-off analysis, custom dimensions, conversion events.
+**What it unlocks:** Full GA4 funnel (session → view_item → add_to_cart → checkout → purchase), CVR by device, drop-off by page, custom dimensions, conversion events. Auto-discovered by domain — no property ID needed.
 
-**Type:** Claude Code MCP — configured locally in `~/.claude/settings.json`
-
-**Step 1 — Add to settings**
-
-Open `~/.claude/settings.json` and add under `mcpServers`:
+Add to `~/.claude/settings.json`:
 
 ```json
-{
-  "mcpServers": {
-    "analytics-mcp": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-samples/analytics-mcp"],
-      "env": {}
-    }
+"analytics-mcp": {
+  "type": "stdio",
+  "command": "pipx",
+  "args": ["run", "analytics-mcp"],
+  "env": {}
+}
+```
+
+**Authenticate:**
+```bash
+gcloud auth application-default login \
+  --client-id-file=/path/to/client_secret.json \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform
+```
+Then in Claude Code: `/mcp` → Reconnect `analytics-mcp`.
+
+**Verify:** Ask `List all my GA4 properties` — you should see your accounts.  
+**Fallback:** If unavailable, skill uses Master Metrics `source: "google_analytics"`.
+
+---
+
+### MCP 2 — `google-ads-mcp` (Google Ads API via GAQL)
+
+**What it unlocks:** Direct GAQL queries — campaign ROAS/CPA/CVR, performance by device, landing page quality score per keyword, accessible customer list.
+
+**Prerequisites:**
+1. A Google Ads Developer Token (from [Google Ads API Center](https://ads.google.com/aw/apiaccess))
+2. Your Google Cloud project ID
+3. Manager account ID (if using MCC)
+
+Add to `~/.claude/settings.json`:
+
+```json
+"google-ads-mcp": {
+  "type": "stdio",
+  "command": "pipx",
+  "args": [
+    "run",
+    "--spec",
+    "git+https://github.com/googleads/google-ads-mcp.git",
+    "google-ads-mcp"
+  ],
+  "env": {
+    "GOOGLE_APPLICATION_CREDENTIALS": "/Users/<you>/.config/gcloud/application_default_credentials.json",
+    "GOOGLE_PROJECT_ID": "your-gcp-project-id",
+    "GOOGLE_ADS_DEVELOPER_TOKEN": "your-22-char-developer-token",
+    "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890"
   }
 }
 ```
 
-Restart Claude Code after saving.
-
-**Step 2 — Authenticate**
-
-On first use, Claude will open a Google OAuth window. Sign in with the Google account that has access to your GA4 properties.
-
-**Step 3 — Verify**
-
-In Claude Code, ask: `List all my GA4 properties`  
-You should see your accounts. If you get an `invalid_grant` error, your token expired — reconnect by running the OAuth flow again (restart Claude Code and trigger any analytics-mcp call).
-
-**Fallback:** If analytics-mcp is unavailable, the skill automatically falls back to GA4 basic data via **Master Metrics** `source: "google_analytics"`.
+**Verify:** Ask `List my Google Ads accounts` — you should see customer IDs.  
+**Fallback:** If unavailable, skill uses Master Metrics `source: "google"`.
 
 ---
 
-### MCP 2 — `Master Metrics` (multi-source data hub)
+### MCP 3 — `tiendanube-mcp` (TiendaNube API — only for TN stores)
 
-**What it unlocks:** Google Ads, Meta Ads, GA4 basic, Pinterest Ads, YouTube Ads, and (optionally) Tiendanube store data — all from a single MCP.
+**What it unlocks:** Real order data (revenue, ticket promedio, UTM attribution per order), abandoned carts, top products, customer new/returning split. Direct from TiendaNube API — not aggregated.
 
-**Type:** Claude.ai native integration — configured at account level, not locally
+**Prerequisites:**
+1. A TiendaNube app with API access (create one at [partners.tiendanube.com](https://partners.tiendanube.com))
+2. Your store's `access_token` and `store_id` (obtained via OAuth flow or Partner Portal)
+3. Docker installed locally
 
-**Step 1 — Enable in claude.ai**
+**Setup:**
+```bash
+git clone https://github.com/AlexandreProenca/nuvemshop-mcp-server.git ~/tiendanube-mcp
+cd ~/tiendanube-mcp
 
-1. Go to [claude.ai](https://claude.ai) → Settings → Integrations
-2. Find **Master Metrics** and click **Connect**
-3. Follow the OAuth flow to link your advertising accounts (Google Ads, Meta Ads, etc.)
+# Create .env file
+echo "TIENDANUBE_ACCESS_TOKEN=your_token_here" > .env
+echo "TIENDANUBE_STORE_ID=your_store_id" >> .env
+echo "MCP_TRANSPORT=sse" >> .env
+echo "MCP_HOST=0.0.0.0" >> .env
+echo "MCP_PORT=8080" >> .env
 
-**Step 2 — Verify**
-
-In Claude Code:
+docker-compose up -d
 ```
-What data sources do I have in Master Metrics?
+
+Add to `~/.claude/settings.json`:
+
+```json
+"tiendanube-mcp": {
+  "type": "sse",
+  "url": "http://localhost:8080/sse"
+}
 ```
-You should see a list like: `google, google_analytics, meta, tiendanube, pinterest, youtube`
 
-Only sources you see here will appear in the report.
-
-**Step 3 — Tiendanube (optional)**
-
-If you use Tiendanube and want platform-level sales data (orders, abandoned carts, UTM attribution by actual order):
-1. In Master Metrics, connect your Tiendanube store
-2. The skill will auto-detect the matching store by domain
-
-If you're not on Tiendanube, this step is irrelevant — the skill uses GA4 Enhanced E-commerce data for sales metrics.
+**Verify:** Ask `Get my TiendaNube store info` — you should see store name and details.  
+**Fallback:** If unavailable, skill uses Master Metrics `source: "tiendanube"`.  
+**Note:** If your store is not on TiendaNube, skip this MCP — GA4 Enhanced E-commerce covers sales data.
 
 ---
 
-### What each MCP unlocks in the report
+### MCP 4 — `Master Metrics` (hub — fallback + Meta Ads)
 
-| Section | Requires | Without it |
-|---|---|---|
-| GA4 funnel + CVR by device | `analytics-mcp` OR Master Metrics `google_analytics` | Placeholder — no funnel data |
-| Google Ads ROAS/CPA/quality score | Master Metrics (`google` source) | Google Ads section skipped |
-| Meta Ads ROAS/CPA/paid funnel | Master Metrics (`meta` source) | Meta Ads section skipped |
-| Ad vs. landing page diagnosis | Either Google or Meta in Master Metrics | Skipped |
-| Tiendanube orders + abandonment | Master Metrics (`tiendanube` source) | Skipped — GA4 e-commerce used instead |
-| Pinterest / YouTube Ads | Master Metrics (`pinterest`/`youtube` source) | Not shown |
+**What it unlocks:** Meta Ads (Facebook + Instagram) as primary source. Also serves as fallback for GA4, Google Ads, and TiendaNube when their dedicated MCPs are unavailable.
 
-**The report always generates** — with or without MCPs. More MCPs = richer data sections.
+**Type:** Claude.ai native integration — configured at account level, not locally.
+
+1. Go to [claude.ai](https://claude.ai) → Settings → Integrations → **Master Metrics** → Connect
+2. Follow the OAuth flow to link Google Ads, Meta Ads, and/or TiendaNube
+3. Verify in Claude Code: `What data sources do I have in Master Metrics?`
+
+---
+
+### What each MCP unlocks
+
+| Report section | Primary source | Fallback | Without any |
+|---|---|---|---|
+| GA4 funnel + CVR by device | `analytics-mcp` | Master Metrics `google_analytics` | No funnel data |
+| Google Ads ROAS/CPA/quality | `google-ads-mcp` (GAQL) | Master Metrics `google` | Google Ads skipped |
+| Meta Ads ROAS/CPA/paid funnel | Master Metrics `meta` | — | Meta Ads skipped |
+| TiendaNube orders + abandonment | `tiendanube-mcp` | Master Metrics `tiendanube` | GA4 e-commerce used |
+| Multi-source triangulation | All 4 sources combined | Partial (with what's available) | Skipped |
+| Pinterest / YouTube Ads | Master Metrics | — | Not shown |
+
+**The report always generates** — each missing source is documented in the report.
 
 ---
 

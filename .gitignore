@@ -7,3 +7,4 @@ screenshot_*.png
 cro_report_*.html
 *.pdf
 /tmp/
+.gstack/

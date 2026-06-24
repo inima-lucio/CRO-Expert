@@ -83,28 +83,151 @@ def fetch_page(url, timeout=10):
 
 
 def detect_platform(html):
-    """Detect e-commerce platform from HTML."""
-    signals = []
+    """
+    Detect web/e-commerce platform using multi-signal confidence scoring.
+    Each signal has a weight; a platform needs score >= 10 to be reported.
+    This avoids false positives from coincidental substring matches.
+    """
     if not html:
-        return signals
+        return ["Unknown"]
 
-    patterns = {
-        "Shopify": ["shopify.com", "shopify-cdn", "Shopify.theme", "cdn.shopify"],
-        "WooCommerce": ["woocommerce", "wp-content/plugins/woocommerce"],
-        "VTEX": ["vtex.com", "vtexcommerce", "vteximg"],
-        "Magento": ["mage/", "magento", "Mage.Cookies"],
-        "PrestaShop": ["prestashop", "/modules/", "presta"],
-        "BigCommerce": ["bigcommerce", "bc-sf-filter"],
-        "Salesforce Commerce": ["demandware", "salesforce.com/s/"],
-        "Tiendanube": ["tiendanube", "nube-sdk"],
-        "MercadoShops": ["mercadoshops"],
+    h  = html           # original case (for case-sensitive signals)
+    hl = html.lower()   # lowercase (for case-insensitive signals)
+
+    # (pattern, weight, case_sensitive)
+    # Score >= 10 → confirmed.  Single weak signals (weight < 10) are never enough alone.
+    PLATFORMS = {
+        "Shopify": [
+            ("cdn.shopify.com",              15, False),
+            ("shopify.com/s/files",          15, False),
+            ("Shopify.theme",                10, True),
+            ("shopify-buy",                  10, False),
+            ("myshopify.com",                15, False),
+            ("shopify-section",               5, False),
+        ],
+        "WooCommerce": [
+            ("wp-content/plugins/woocommerce", 15, False),
+            ("woocommerce",                  10, False),
+            ("wp-content/",                   5, False),
+            ("wp-includes/",                  5, False),
+        ],
+        "WordPress": [
+            ("wp-content/",                   8, False),
+            ("wp-includes/",                  8, False),
+            ("/wp-json/",                      8, False),
+            ("generator\" content=\"WordPress", 15, False),
+            ("generator' content='WordPress",  15, False),
+        ],
+        "Magento": [
+            ("Mage.Cookies",                 15, True),
+            ("MAGE_CACHE_STORAGE",           15, True),
+            ("mage/cookies",                 15, False),
+            ("mage-init",                    12, True),
+            ("/static/version",              10, False),
+            ("requirejs/require.js",          5, False),
+            ("magento",                       8, False),
+        ],
+        "Tiendanube": [
+            ("tiendanube.com",               15, False),
+            ("nuvemshop.com.br",             15, False),
+            ("d26lpennugtm8s.cloudfront.net", 15, False),
+            ("nube-sdk",                     15, False),
+            ("tiendanube",                   10, False),
+        ],
+        "VTEX": [
+            ("vtex.com",                     15, False),
+            ("vtexcommerce",                 15, False),
+            ("vteximg",                      15, False),
+            ("io.vtex.com",                  15, False),
+        ],
+        "PrestaShop": [
+            ("prestashop",                   12, False),
+            ("generator\" content=\"PrestaShop", 15, False),
+        ],
+        "BigCommerce": [
+            ("bigcommerce.com",              15, False),
+            ("bc-sf-filter",                 10, False),
+            ("bigcommerce",                  10, False),
+        ],
+        "Salesforce Commerce": [
+            ("demandware.net",               15, False),
+            ("salesforce.com/s/",            15, False),
+            ("demandware.edgesuite",         15, False),
+        ],
+        "MercadoShops": [
+            ("mercadoshops",                 15, False),
+        ],
+        "Wix": [
+            ("wix.com/",                     15, False),
+            ("wixstatic.com",                15, False),
+            ("parastorage.com",              15, False),
+            ("_wix_browser_id",              10, True),
+        ],
+        "Squarespace": [
+            ("squarespace.com",              15, False),
+            ("sqsp.net",                     15, False),
+            ("generator\" content=\"Squarespace", 15, False),
+        ],
+        "Webflow": [
+            ("webflow.com",                  15, False),
+            ("uploads-ssl.webflow.com",      15, False),
+            ("data-wf-page=",                15, False),
+            ("data-wf-site=",                15, False),
+        ],
+        "Jumpseller": [
+            ("jumpseller.com",               15, False),
+            ("jumpseller",                   10, False),
+        ],
+        "Next.js": [
+            ("__NEXT_DATA__",                15, True),
+            ("_next/static",                 12, False),
+        ],
+        "Nuxt.js": [
+            ("__NUXT_DATA__",                15, True),
+            ("/_nuxt/",                      12, False),
+            ("__nuxt",                        8, True),
+        ],
     }
 
-    for platform, patterns_list in patterns.items():
-        if any(p in html for p in patterns_list):
-            signals.append(platform)
+    scores = {}
+    for platform, signals in PLATFORMS.items():
+        score = 0
+        for pattern, weight, case_sensitive in signals:
+            haystack = h  if case_sensitive else hl
+            needle   = pattern if case_sensitive else pattern.lower()
+            if needle in haystack:
+                score += weight
+        if score >= 10:
+            scores[platform] = score
 
-    return list(set(signals))
+    # WooCommerce implies WordPress — show the more specific one only
+    if "WooCommerce" in scores:
+        scores.pop("WordPress", None)
+
+    if scores:
+        return [p for p, _ in sorted(scores.items(), key=lambda x: -x[1])]
+
+    # ── Fallback 1: meta generator tag ────────────────────────────────────────
+    gen = re.search(
+        r'<meta[^>]+name=["\']generator["\'][^>]+content=["\'](.*?)["\']'
+        r'|<meta[^>]+content=["\'](.*?)["\'][^>]+name=["\']generator["\']',
+        hl
+    )
+    if gen:
+        name = (gen.group(1) or gen.group(2) or "").strip()
+        if name:
+            return [name.title()]
+
+    # ── Fallback 2: JS framework fingerprinting ───────────────────────────────
+    if '"react"' in hl or "react-dom" in hl or "react.production.min" in hl:
+        return ["Custom (React)"]
+    if "vue.js" in hl or "vue.min.js" in hl or "vue.runtime" in hl:
+        return ["Custom (Vue.js)"]
+    if "angular" in hl and "ng-app" in hl:
+        return ["Custom (Angular)"]
+
+    # ── Fallback 3: generic custom site ──────────────────────────────────────
+    return ["Custom HTML / Ad-hoc"]
 
 
 def detect_features(html):
@@ -115,16 +238,36 @@ def detect_features(html):
     features = []
 
     checks = {
-        "Live chat": ["intercom", "zendesk", "tawk.to", "livechat", "drift.com", "crisp.chat", "tidio"],
-        "Email popup": ["popup", "modal", "klaviyo", "mailchimp", "omnisend"],
-        "Countdown timer": ["countdown", "timer", "account_down"],
-        "Trust badges": ["trustpilot", "verified", "secure", "ssl", "mcafee", "norton"],
-        "Reviews": ["reviews", "reseñas", "ratings", "yotpo", "stamped", "judge.me", "okendo"],
-        "Wishlist": ["wishlist", "lista de deseos", "favoritos", "save for later"],
-        "Express checkout": ["apple-pay", "google-pay", "paypal", "klarna", "afterpay", "express"],
-        "Free shipping bar": ["free.shipping", "envio.gratis", "livraison.gratuite"],
-        "Back in stock": ["back.in.stock", "notify.me", "avisa"],
-        "Recently viewed": ["recently.viewed", "visto.recientemente"],
+        "Live chat (Cliengo)":    ["cliengo", "cliengo.com"],
+        "Live chat (Intercom)":   ["intercom.io", "intercomcdn"],
+        "Live chat (Zendesk)":    ["zendesk.com", "zdassets.com"],
+        "Live chat (Tawk.to)":    ["tawk.to"],
+        "Live chat (Crisp)":      ["crisp.chat"],
+        "Live chat (Tidio)":      ["tidio"],
+        "Live chat (HubSpot)":    ["hubspot"],
+        "Live chat (Drift)":      ["drift.com"],
+        "Google Tag Manager":     ["googletagmanager.com", "gtm.js"],
+        "Google Analytics":       ["google-analytics.com", "gtag/js", "ga.js"],
+        "Meta Pixel":             ["connect.facebook.net", "fbevents.js", "fbq("],
+        "Google Ads (remarketing)": ["googleadservices.com", "googlesyndication", "adwords"],
+        "Email popup / Klaviyo":  ["klaviyo"],
+        "Email popup / Mailchimp":["mailchimp"],
+        "Email popup / Omnisend": ["omnisend"],
+        "Countdown timer":        ["countdown", "countdowntimer"],
+        "Trust badges":           ["trustpilot", "mcafee", "norton", "sello-confianza"],
+        "Reviews (Yotpo)":        ["yotpo"],
+        "Reviews (Judge.me)":     ["judge.me"],
+        "Reviews (Okendo)":       ["okendo"],
+        "Wishlist":               ["wishlist", "lista-de-deseos", "favoritos"],
+        "Express checkout (MercadoPago)": ["mercadopago", "sdk.mercadopago"],
+        "Express checkout (PayPal)": ["paypal.com/sdk", "paypalobjects"],
+        "Express checkout (Stripe)": ["stripe.com/v3", "stripe.js"],
+        "Free shipping bar":      ["free-shipping", "envio-gratis", "envío gratis"],
+        "Back in stock":          ["back-in-stock", "notify-me", "avisame"],
+        "Recently viewed":        ["recently-viewed", "visto-recientemente"],
+        "Hotjar / Heatmaps":      ["hotjar.com", "hj("],
+        "Microsoft Clarity":      ["clarity.ms"],
+        "Optimizely / A-B test":  ["optimizely", "abtasty", "vwo.com", "googleoptimize"],
     }
 
     html_lower = html.lower()

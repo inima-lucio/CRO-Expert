@@ -1,9 +1,9 @@
 ---
 name: cro-expert
-description: CRO Expert Agent for e-commerce. Pass a website URL and get a complete conversion rate optimization audit covering 4Ps, AIDA funnel, Cialdini psychology, Nielsen UX heuristics, and data-driven recommendations. Analyzes home page, product pages, cart, and checkout. Automatically pulls real GA4 data (sessions, funnel drop-offs, conversions, device split) via analytics-mcp — no property ID needed. Cross-references GA4 + TiendaNube + Google Ads + Meta Ads to detect double attribution, channel efficiency gaps, and mobile CVR gaps. Applies embedded meta-ads-analyzer (Breakdown Effect, Learning Phase), google-ads-analyzer (Quality Score, Impression Share, Smart Bidding), and ecommerce-bi (RFM, cohorts, CLV, Market Basket) frameworks automatically. Produces a unified funnel from impression to real purchase and an attribution accuracy score. Use when auditing an e-commerce site, analyzing CTR performance, reviewing conversion funnels, identifying friction points, or building optimization roadmaps.
+description: CRO Expert Agent for e-commerce — final version. Pass a website URL and get a complete conversion rate optimization audit. Runs 9 embedded skills automatically: performance (Core Web Vitals LCP/INP/CLS with CVR impact quantified), seo-optimizer (schema markup, meta tags, message match search→landing), ui-ux-designer (visual hierarchy, contrast, fold line, thumb zone per screenshot), form-cro (checkout field reduction, autocomplete, mobile keyboards), generate-image (visual mockups of the top 3 critical fixes), content-creator (ready-to-test copy variants for every copy A/B test), meta-ads-analyzer (Breakdown Effect, Learning Phase), google-ads-analyzer (Quality Score, Impression Share, Smart Bidding), ecommerce-bi (RFM, cohorts, CLV, Market Basket). Full audit coverage: site context extraction (no generic findings), typed callout IDs per page (HOME-HERO-01, PDP-CTA-01, CO-FORM-01), cross-page flow analysis (HOME→PDP→CART→CHECKOUT transitions), post-purchase experience audit (thank you page + email confirmation), GA4 funnel + TiendaNube + Google Ads + Meta Ads triangulation with double-attribution detection, diagnostic TiendaNube app recommendations (Perfit, Judge.me, WhatsApp, Doofinder, Smile.io) triggered by specific audit findings. Use when auditing any e-commerce site.
 license: MIT
 metadata:
-  version: 3.0.0
+  version: 4.2.0
   author: Lucio Monopoli
   email: inima.lucio@gmail.com
   agency: INIMA Interactive
@@ -11,7 +11,7 @@ metadata:
   domain: cro-ecommerce
   updated: 2026-06-24
   tech-stack: analytics-mcp, meta-ads-mcp, tiendanube-mcp, Master-Metrics-MCP, WebFetch, Playwright
-  embedded-skills: meta-ads-analyzer, google-ads-analyzer, ecommerce-bi
+  embedded-skills: meta-ads-analyzer, google-ads-analyzer, ecommerce-bi, ui-ux-designer, performance, seo-optimizer, form-cro, generate-image, content-creator
 ---
 
 # CRO Expert — E-commerce Conversion Audit
@@ -196,11 +196,132 @@ Also collect:
 - Tech stack (Shopify, WooCommerce, VTEX, Magento, custom, etc.)
 - Presence of chat, exit popups, trust badges, countdown timers
 
+### PHASE 0B — Site Context Extraction
+
+**Before capturing a single screenshot**, extract the specific identity of this store. This step prevents generic analysis — every subsequent finding must reference THIS brand and THIS audience, not a universal template.
+
+From the home page HTML + product pages + prices visible, extract:
+
+1. **Category**: What do they sell? (fashion, beauty, electronics, food & beverage, home, sports, jewelry, health, pets, toys, B2B, SaaS, etc.)
+2. **Price tier**: Budget (avg < $30) · Mid ($30–150) · Premium ($150–500) · Luxury (> $500)?
+3. **Audience signals**: Who is this for? Age range, lifestyle, language register, gender if relevant, geography (local vs. international?)
+4. **Brand personality**: Minimal/luxury · Playful/youth · Artisanal/warm · Professional/corporate · Bold/disruptive? (Infer from typography, imagery, copy tone)
+5. **Primary value proposition**: What's the ONE headline promise? Quote it exactly from the site.
+6. **Active differentiators**: Free returns? Local/handmade? Subscription? Fast delivery? Eco? Custom/personalized?
+7. **Live promotions**: What discounts, free shipping thresholds, or seasonal offers are visible RIGHT NOW?
+8. **Trust level required**: First-time buyer brand (needs heavy trust building) or repeat/known brand (users already trust)?
+
+Save as `cro_site_context.json`:
+```json
+{
+  "domain": "example.com",
+  "category": "beauty",
+  "subcategory": "skincare",
+  "price_tier": "mid-range",
+  "avg_price_visible": 45,
+  "audience": "women 28–42, health-conscious, urban",
+  "brand_personality": "clean, natural, trustworthy",
+  "primary_vp_quote": "Skincare que respeta tu piel y el planeta",
+  "differentiators": ["ingredientes naturales", "envío gratis > $50", "devolución 30 días"],
+  "live_promotions": ["20% off primera compra", "2x1 en hidratantes"],
+  "trust_level_required": "high (brand awareness low, premium price)",
+  "benchmark_reference": "beauty"
+}
+```
+
+**Use this context in every phase**: AIDA evaluations, Cialdini scores, recommendations, and A/B test hypotheses must all be written as if you understand WHO this brand is selling to and WHY someone would or wouldn't buy here specifically.
+
 ---
 
-## PHASE 1: Visual Capture
+## PHASE 0.5: Performance & Core Web Vitals Audit
 
-For each discovered page:
+**Invoke the `performance` skill** on the home URL before taking any screenshot. Speed affects CVR directly — every finding in Phase 1 that involves layout, images, or LCP elements needs the real performance data as context.
+
+Run against the home URL and at least one PDP URL (PDPs suelen ser más pesadas por imágenes de producto):
+
+```
+/performance <url>
+```
+
+### PERF-1 — Core Web Vitals (target vs. real)
+
+Collect via Lighthouse / PageSpeed Insights API (WebFetch a `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=<URL>&strategy=mobile`):
+
+| Metric | Target | Critical |
+|--------|--------|----------|
+| **LCP** (Largest Contentful Paint) | < 2.5s | > 4s |
+| **INP** (Interaction to Next Paint) | < 200ms | > 500ms |
+| **CLS** (Cumulative Layout Shift) | < 0.1 | > 0.25 |
+| **FCP** (First Contentful Paint) | < 1.8s | > 3s |
+| **TTFB** (Time to First Byte) | < 800ms | > 1.8s |
+
+**CVR impact table** (usa esto para dimensionar el hallazgo en el reporte):
+
+| LCP real | Impacto en CVR vs. < 2.5s |
+|----------|--------------------------|
+| 2.5–3s | -5% |
+| 3–4s | -12% |
+| 4–5s | -20% |
+| > 5s | -35%+ |
+
+### PERF-2 — Diagnóstico de imagen (mayor causa de LCP alto en e-commerce)
+
+Evaluar para home y PDP:
+- ¿Las imágenes hero y de producto están en formato WebP/AVIF o siguen siendo JPEG/PNG sin comprimir?
+- ¿El LCP element es una imagen de producto? (frecuente en PDPs) → ¿tiene `loading="eager"` y `fetchpriority="high"`?
+- ¿Las imágenes below-fold tienen `loading="lazy"`?
+- ¿El tamaño declarado en HTML coincide con el tamaño real servido? (oversize images = CLS + LCP)
+
+### PERF-3 — JavaScript & render blocking
+
+- ¿Hay scripts de terceros bloqueantes en `<head>` sin `async`/`defer`? (tracking pixels, chat widgets, Hotjar)
+- ¿El bundle de JS supera 300KB? → evaluar code splitting
+- ¿Las fuentes tienen `font-display: swap`?
+
+### PERF-4 — CLS (Layout Shift)
+
+CLS alto en e-commerce típicamente viene de:
+- Imágenes sin dimensiones declaradas (`width`/`height` en el `<img>`)
+- Banners de cookies / popups que desplazan el layout
+- Fuentes web que provocan FOIT/FOUT (Flash of Invisible/Unstyled Text)
+- Widgets de chat que aparecen tarde y empujan contenido
+
+### Output de Phase 0.5
+
+Guardar en `cro_performance.json`:
+```json
+{
+  "url_tested": ["https://...", "https://.../producto/ejemplo"],
+  "strategy": "mobile",
+  "lcp": { "value_ms": 3800, "rating": "needs_improvement", "element": "img.hero-product" },
+  "inp": { "value_ms": 180, "rating": "good" },
+  "cls": { "value": 0.18, "rating": "needs_improvement", "cause": "imagen sin dimensiones en hero" },
+  "fcp": { "value_ms": 2100, "rating": "needs_improvement" },
+  "ttfb": { "value_ms": 620, "rating": "good" },
+  "performance_score": 54,
+  "estimated_cvr_impact": "-12% vs. sitio con LCP < 2.5s",
+  "top_issues": [
+    "LCP 3.8s — imagen hero sin WebP ni fetchpriority",
+    "CLS 0.18 — imágenes de producto sin width/height declarado",
+    "2 scripts de terceros bloqueando render en <head>"
+  ]
+}
+```
+
+Estos datos alimentan directamente:
+- **Phase 1C**: callouts `HOME-VIS-*` y `PDP-IMG-*` con impacto de CVR cuantificado
+- **Phase 5 (Scoring)**: el performance score penaliza el score de cada página afectada
+- **Phase 6 (Reporte)**: sección de velocidad en Page 3 con los vitals visualizados
+- **Phase 7 (A/B Test Plan)**: las optimizaciones de velocidad entran como "quick wins" con impacto medible
+
+---
+
+## PHASE 1: Visual Capture + UX/UI Expert Analysis
+
+Run in order for EACH discovered page: capture → UX/UI review → CRO callouts.
+
+### 1A — Screenshot Capture
+
 1. Use the `browse` skill to take a **viewport-only screenshot (first scroll only — NOT full-page)** at 1440x900px (desktop)
    - Command: `$B viewport 1440x900 && $B goto <url> && $B wait --networkidle && $B screenshot --viewport <path>`
    - Save as `screenshot_<page>_desktop.png` (e.g. `screenshot_pdp_desktop.png`)
@@ -209,25 +330,111 @@ For each discovered page:
    - Save as `screenshot_<page>_mobile.png`
    - **Always use `--viewport` flag** — full-page screenshots are NOT used in CRO reports
    - **Always wait `--networkidle`** before capturing to avoid blank/unrendered screenshots
-3. Identify 3–5 CRO issues visible in the screenshot and for each one:
-   - Write a numbered callout text (for the `callouts` array)
-   - Estimate its **approximate position** in the screenshot as x/y percentages (for `callout_markers`)
-   - Use your CRO expertise: e.g., hero area is ~x:50,y:25; nav is ~x:50,y:6; CTA button typical PDP ~x:30,y:55
-   - Assign priority: `critical` (red) for blocking issues, `warning` (orange) for friction, `info` (blue) for improvements
-   - Add a bounding box (`box_x/box_y/box_w/box_h`) when the issue covers a specific region (e.g., reviews section missing, no trust badges area)
 
-The `callout_markers` field is what makes markers appear **overlaid directly on the screenshot** in the report. Without it, only text callouts show below. Always generate both fields.
+### 1B — UX/UI Expert Visual Analysis
+
+After capturing each page's screenshots, **invoke the `ui-ux-designer` skill** to analyze the desktop screenshot. This is the UX/UI expert lens — it runs BEFORE applying CRO frameworks so that visual and structural issues are caught independently.
+
+Instruct the ui-ux-designer skill to evaluate for this specific screenshot:
+
+**Visual hierarchy:**
+- Is there a clear reading order? Does the eye land on the most important element first?
+- What is the dominant visual element — is that the right choice for this page's goal?
+
+**Typography:**
+- H1 vs body vs CTA — is the size/weight hierarchy clear at a glance?
+- Is copy legible at typical viewing distance? (minimum 16px body, 14px labels)
+
+**Color contrast & CTA visibility:**
+- Does the primary CTA button stand out from the background? (WCAG AA minimum: 4.5:1 contrast)
+- Is there a single dominant color pull toward the primary action?
+
+**Fold line analysis:**
+- What is above the fold on desktop (1440×900)? On mobile (390×844)?
+- Is the primary CTA visible WITHOUT scrolling on both viewports?
+- What's the first thing a new visitor sees — does it communicate value in <2 seconds?
+
+**Thumb zone (mobile only):**
+- Are primary actions reachable with one thumb? (Bottom 1/3 of mobile screen = safe zone)
+- Is the ATC button / CTA in the dead zone (top half of screen = hard to reach one-handed)?
+
+**Whitespace & density:**
+- Is the layout cluttered or does it breathe?
+- Are there competing visual hierarchies fighting for attention?
+
+**Page-specific UX focus** — apply based on current page. Use `references/page_criteria.md` for the full per-page visual checklist:
+- **HOME**: Does the hero communicate THIS brand's value in <2 seconds to THIS audience?
+- **PDP**: Is the Add to Cart button the visual focal point? Is it above the fold on mobile?
+- **CART**: Is the order total and "Proceed to Checkout" CTA obvious without scrolling?
+- **CHECKOUT**: Does the form feel clean, trustworthy, and not overwhelming?
+
+Record ALL UX/UI findings — they feed directly into the callout_markers in step 1C.
+
+### 1C — CRO Callout Generation with Typed IDs
+
+Combine the UX/UI findings (from 1B) with your CRO expertise to generate **5–8 callout markers per page**. This is more than the previous 3–5 minimum — the visual is the anchor for the entire analysis, so it must be rich.
+
+**Every callout must be specific to THIS store** — not generic observations that apply to any site. Reference actual elements visible in the screenshot: the exact text of a headline, the color of a specific button, the absence of a price near a specific element, etc.
+
+**Typed Callout ID format: `{PAGE}-{CATEGORY}-{N:02d}`**
+
+| PAGE code | Page |
+|-----------|------|
+| HOME | Home page |
+| PLP | Product listing / category page |
+| PDP | Product detail page |
+| CART | Cart / basket |
+| CO | Checkout (any step) |
+
+| CATEGORY code | What it flags |
+|---------------|---------------|
+| HERO | Hero area, banner, main visual |
+| NAV | Navigation, menu, search, breadcrumbs |
+| CTA | Call-to-action buttons |
+| COPY | Headlines, body text, value proposition |
+| IMG | Product images, photography quality |
+| PRICE | Price display, anchoring, savings |
+| TRUST | SSL badges, guarantees, certifications |
+| SOCIAL | Reviews, ratings, UGC, testimonials |
+| PROMO | Discounts, free shipping, urgency, scarcity |
+| VARIANT | Size/color selectors, variant UX |
+| FORM | Form fields, labels, validation |
+| PAYMENT | Payment methods, logos |
+| FLOW | Transition/navigation issues |
+| VIS | Visual design: hierarchy, contrast, spacing |
+
+**Examples of good (specific) callouts:**
+- `HOME-HERO-01` → "El titular principal dice 'Bienvenidos a nuestra tienda' — no comunica qué venden ni para quién. Para este público (mujeres 28–42 que buscan skincare natural), debería decir algo como 'Skincare natural para tu rutina diaria'. Impacto: primeros 2 segundos perdidos."
+- `PDP-CTA-01` → "El botón 'Agregar al carrito' es gris claro sobre fondo blanco — el contraste es insuficiente (ratio estimado ~2.1:1, WCAG requiere 4.5:1). El CTA debe ser el elemento visualmente dominante de la página."
+- `CART-TRUST-01` → "No hay ningún badge de pago ni sello de seguridad visible en la vista del carrito. Este punto de la sesión es de alta ansiedad para el usuario — la ausencia de señales de confianza cerca del total aumenta el abandono."
+- `CO-FORM-01` → "El checkout muestra 9 campos en pantalla sin indicador de progreso. Para una tienda premium con ticket promedio > $150, la simplificación del form es la acción de mayor impacto inmediato."
+
+**Bad callout (too generic — don't do this):**
+- `PDP-SOCIAL-01` → "No hay suficientes reviews" ← esto aplica a cualquier tienda y no dice nada específico.
+
+**Good callout (specific):**
+- `PDP-SOCIAL-01` → "La sección de reviews existe pero muestra solo 3 opiniones, todas de hace 8 meses. Para una marca de skincare donde la confianza es el principal driver de compra (y el precio promedio es $45), la falta de reviews recientes es una barrera crítica."
+
+The `callout_markers` field is what makes markers appear **overlaid directly on the screenshot** in the report. Every finding must have a marker — the visual is the anchor for everything.
+
+For each callout:
+- Write the full explanation in `callouts[]` using the typed ID as the label
+- Add the `callout_markers[]` entry with the ID, x/y position, priority, and bounding box when applicable
+- Use your spatial awareness: hero area ~x:50,y:20; nav ~x:50,y:5; CTA button PDP ~x:30,y:55; price area PDP ~x:25,y:40; reviews PDP ~x:50,y:75
+- Priority: `critical` (red) for conversion blockers · `warning` (orange) for significant friction · `info` (blue) for improvements
 
 All screenshots go into the analysis working directory so `report_generator.py` can embed them as base64 in the final HTML/PDF.
 
 ---
 
-## PHASE 2: HTML & Copy Analysis
+## PHASE 2: HTML & Copy Analysis + SEO Signals
 
-For each page, use `WebFetch` to retrieve the HTML and run `scripts/html_analyzer.py <url>`.
+For each page, use `WebFetch` to retrieve the HTML and run `scripts/html_analyzer.py <url>`. **Invoke the `seo-optimizer` skill** concurrently on the home and PDP URLs to get expert SEO diagnosis — the output feeds directly into message match analysis and trust signal evaluation.
+
+### 2A — HTML & Copy (base)
 
 Extract and evaluate:
-- `<title>` and `<meta description>` — clarity, keyword use, CTA presence
+- `<title>` y `<meta description>` — clarity, keyword use, CTA presence
 - H1/H2/H3 hierarchy — message clarity, value proposition
 - All CTAs: text, color contrast, size, position, count above fold
 - Product imagery: count, zoom capability, lifestyle vs. white background ratio
@@ -235,13 +442,203 @@ Extract and evaluate:
 - Social proof elements: star ratings, review count, testimonials, UGC
 - Trust signals: SSL badge, payment logos, return policy, certifications
 - Forms: field count, labels, error messaging, autofill support
-- Page speed signals: LCP element, image optimization clues
+
+### 2B — SEO Signals que afectan CRO
+
+**Invoke `seo-optimizer`** sobre home y PDP. Del output de ese skill, extraer específicamente los puntos con impacto en conversión (no en rankings):
+
+**Message match search → landing (mayor causa de bounce en tráfico orgánico):**
+- ¿El `<title>` de la PDP contiene el nombre exacto del producto tal como el usuario lo busca en Google?
+- ¿La `<meta description>` tiene un CTA o propuesta de valor, o es genérica/vacía?
+- ¿El H1 de la PDP coincide con la query de búsqueda probable? Si el usuario busca "zapatillas running mujer Nike" y el H1 dice "Producto 4523-B" → el usuario rebota aunque llegó a la página correcta.
+- Si hay discrepancia entre lo que Google muestra en el snippet y lo que el usuario ve al entrar → flag como `PDP-COPY-SEO-01` con impacto en bounce rate.
+
+**Schema markup de producto (impacto en CTR orgánico y trust):**
+- ¿Hay `<script type="application/ld+json">` con `@type: "Product"`?
+- ¿Incluye `aggregateRating` con `ratingValue` y `reviewCount`? → Activa las estrellas en Google → CTR orgánico +15–30%
+- ¿Incluye `offers` con `price`, `priceCurrency`, `availability`? → Activa precio en snippet → CTR +8–12%
+- ¿Incluye `brand` y `sku`?
+
+Si falta el schema de producto: generar callout `PDP-COPY-SEO-02` con impacto estimado en CTR orgánico.
+
+**Core Web Vitals en Page Experience (cruzar con Phase 0.5):**
+- ¿El sitio pasó los thresholds de CWV? (LCP < 2.5s, INP < 200ms, CLS < 0.1)
+- Si no: Google puede penalizar el ranking → menos tráfico orgánico → menos conversiones a igual CVR
+- Citar datos de `cro_performance.json` si ya están disponibles
+
+**Señales de mobile-friendliness:**
+- ¿Hay `<meta name="viewport">`?
+- ¿El texto es legible sin zoom en mobile? (font-size mínimo 16px en body)
+- ¿Los tap targets tienen al menos 48×48px de área clickable?
+
+**Output de 2B:** Agregar a cada `cro_analysis_<page>.json` una sección `"seo_signals"`:
+```json
+"seo_signals": {
+  "title_match": "bueno",
+  "meta_description": "vacía — oportunidad crítica de CTR",
+  "h1_keyword_match": "parcial",
+  "schema_product": false,
+  "schema_rating": false,
+  "schema_offers": false,
+  "cwv_pass": false,
+  "mobile_viewport": true,
+  "estimated_ctr_impact": "Sin schema de reviews: -15–30% CTR orgánico vs. competidores con estrellas en Google",
+  "callouts": ["PDP-COPY-SEO-01", "PDP-COPY-SEO-02"]
+}
+```
+
+---
+
+## PHASE 2.5: Cross-page Flow Analysis
+
+**Run this after all pages have been individually captured and analyzed.** This phase finds friction and inconsistencies BETWEEN pages — gaps that page-level analysis always misses. A site can have a perfect PDP and a perfect cart, but still lose users in the transition between them.
+
+### FLOW-1 — HOME → PDP Transition
+
+Visit the home page, click the hero CTA or main featured product. Evaluate:
+
+- **Message match**: Does the headline/offer in the home hero match what the PDP shows? If home says "Summer Collection" and the PDP shows generic product info without mentioning the season → broken message match.
+- **Destination quality**: Does the hero CTA lead to the right place? (best seller, featured collection, active promo landing — NOT the homepage itself or a generic category with no context)
+- **Momentum**: Does the visual style continue from home to PDP? Or does it feel like a different site?
+- **Promo consistency**: If home shows "20% off everything", does the PDP show the 20% off price?
+
+Flag with ID `FLOW-HOME-PDP-01`, `FLOW-HOME-PDP-02`, etc.
+
+### FLOW-2 — PDP → CART Transition
+
+Click "Add to Cart" on the PDP. Evaluate:
+
+- **Confirmation clarity**: Is the ATC confirmation immediate and unambiguous? (A subtle toast that disappears in 1 second is a friction point for first-time buyers)
+- **Cart accuracy**: Does the cart show the SAME product image, name, variant, and price as the PDP? Any mismatch creates doubt and abandonment.
+- **Shipping promise continuity**: If PDP says "Free shipping on orders over $50", does the cart reinforce this or contradict it?
+- **Cross-sell quality**: If there's a cross-sell at this step — is it relevant to what was just added, or does it feel random?
+
+Flag with ID `FLOW-PDP-CART-01`, `FLOW-PDP-CART-02`, etc.
+
+### FLOW-3 — CART → CHECKOUT Transition
+
+Click "Proceed to Checkout" from the cart. Evaluate:
+
+- **Price surprises**: Do any new costs appear at checkout that weren't visible in the cart? (Taxes added, shipping fee surfaced for first time, currency difference) — this is the #1 checkout abandonment cause globally.
+- **Form pre-fill**: If the user has an account or used the browser before, is the form pre-filled?
+- **Order summary**: Does checkout Step 1 show the same items and total as the cart?
+- **Trust continuity**: Are the same trust signals present? (The cart may show SSL badges but if checkout step 2 doesn't, anxiety spikes at payment)
+
+Flag with ID `FLOW-CART-CO-01`, `FLOW-CART-CO-02`, etc.
+
+### FLOW-4 — Cross-funnel Consistency Audit
+
+Build this table from what you observed across all pages:
+
+| Element | HOME | PDP | CART | CHECKOUT | Issue? |
+|---------|------|-----|------|----------|--------|
+| Free shipping offer | | | | | |
+| Return policy mention | | | | | |
+| Accepted payment methods | | | | | |
+| SSL/security badge | | | | | |
+| Active promo/discount | | | | | |
+| Contact/support access | | | | | |
+| Brand voice/tone | | | | | |
+
+Any inconsistency = potential drop-off. Flag each with `FLOW-CONSISTENCY-01`, etc.
+
+### FLOW Output
+
+Score each transition 1–5 (1 = broken, 3 = adequate, 5 = seamless).
+The weakest transition score = hidden high-impact opportunity. Highlight it as a priority in Phase 5 scoring and Phase 6 recommendations.
+
+Add flow findings to each relevant page's `cro_analysis_<page>.json` under `"flow_issues"`:
+```json
+"flow_issues": [
+  {
+    "id": "FLOW-HOME-PDP-01",
+    "severity": "critical",
+    "description": "El CTA principal de home lleva a una categoría genérica de 48 productos sin contexto de la promoción activa — el usuario pierde el hilo de la oferta que vio en el hero.",
+    "fix": "Crear una landing de campaña específica para el hero CTA, o usar colecciones filtradas que mantengan el contexto del banner."
+  }
+]
+```
+
+---
+
+## PHASE 2.7: Post-Purchase Experience Audit
+
+**Ejecutar esta fase para toda tienda**, independientemente de la plataforma. La experiencia post-compra es la zona más ignorada del funnel y una de las más rentables: un cliente que acaba de comprar es el momento de mayor disposición emocional para referir, recomprar, y dejar una review.
+
+Esta fase no requiere invocar un skill externo — es análisis heurístico + HTML de la página de gracias + verificación del email de confirmación.
+
+### POST-1 — Thank You Page (Página de Agradecimiento)
+
+Navegar a la página de confirmación post-compra (TiendaNube: `/checkout/thank_you` o similar). Hacer screenshot viewport desktop + mobile con los mismos parámetros de Phase 1A.
+
+Evaluar:
+
+**Lo básico que debe estar (y a menudo no está):**
+- [ ] ¿Muestra el número de orden claramente?
+- [ ] ¿Muestra el resumen de lo comprado (productos, cantidades, precio total)?
+- [ ] ¿Informa cuándo llega el pedido (estimación de entrega)?
+- [ ] ¿Dice qué pasa ahora? ("Te enviamos un email de confirmación" → reduce ansiedad post-compra)
+- [ ] ¿Hay un link de tracking o instrucciones de seguimiento?
+
+**Lo que convierte a clientes únicos en recurrentes:**
+- [ ] ¿Hay una oferta de cross-sell relevante? ("Compraste X — los clientes que compran X también llevan Y con 15% off")
+- [ ] ¿Hay un incentivo para la próxima compra? (cupón de descuento para la segunda orden)
+- [ ] ¿Hay una invitación a seguir en redes sociales o unirse a una comunidad?
+- [ ] ¿Se pide review en este momento? (el momento de mayor satisfacción — si Judge.me está activo, el email llega después, pero un CTA en la página sube la tasa)
+- [ ] ¿Hay un programa de referidos activo? ("Compartí con un amigo y los dos ganan $X")
+
+**Señales de reducción de cognitive dissonance** (el comprador siempre tiene dudas post-pago):
+- [ ] Mensaje de confirmación que refuerza la decisión ("Excelente elección — tu pedido está en buenas manos")
+- [ ] Recordatorio de la política de devolución ("Si no quedás conforme, tenés 30 días sin preguntas")
+- [ ] Datos de contacto visibles por si surge alguna duda
+
+**Red flags frecuentes en la Thank You page:**
+- Página genérica de "Gracias por tu compra" sin nada más → oportunidad cero aprovechada
+- Sin número de orden → el cliente no sabe si la compra se procesó
+- Sin estimación de entrega → genera soporte innecesario ("¿cuándo llega mi pedido?")
+- Redirige a home sin ofrecer nada → el usuario cierra la pestaña y se va para siempre
+
+### POST-2 — Email de Confirmación
+
+Si es posible obtener el email de confirmación (el usuario puede compartirlo, o se puede inferir del HTML del thank you + plataforma):
+
+- [ ] ¿Llega en < 5 minutos? (emails tardíos generan soporte)
+- [ ] ¿Tiene asunto claro? ("Tu pedido #12345 está confirmado" > "Gracias")
+- [ ] ¿Incluye resumen del pedido con imagen del producto?
+- [ ] ¿Tiene link de tracking?
+- [ ] ¿Tiene datos de contacto del vendedor?
+- [ ] ¿Es el inicio de una secuencia de nurturing post-compra o es el único email?
+
+Si hay secuencia post-compra activa (detectable por pixel de Perfit/Klaviyo en HTML): documentar los flujos activos. Si no hay → es una de las recomendaciones de Phase 8 (Perfit flow post-compra).
+
+### POST-3 — Score y Output
+
+Agregar a `cro_analysis_thankyou.json`:
+```json
+{
+  "url": "https://.../checkout/thank_you",
+  "score": 28,
+  "order_summary_visible": true,
+  "delivery_estimate_visible": false,
+  "crosssell_present": false,
+  "review_request_present": false,
+  "referral_program_present": false,
+  "cognitive_dissonance_signals": 1,
+  "post_purchase_email_sequence": false,
+  "critical_issues": [
+    "POST-01: La Thank You page no tiene estimación de entrega — principal causa de tickets de soporte post-compra ('¿cuándo llega mi pedido?').",
+    "POST-02: Sin cross-sell ni oferta de segunda compra — el momento de mayor receptividad del cliente se desaprovecha completamente.",
+    "POST-03: Sin secuencia de email post-compra activa — cada cliente nuevo es un gasto sin nurturing hacia la recompra."
+  ],
+  "revenue_opportunity": "Con una secuencia post-compra de 3 emails bien configurada en Perfit, el 8–15% de los compradores realiza una segunda compra en los siguientes 30 días."
+}
+```
 
 ---
 
 ## PHASE 3: CRO Framework Analysis
 
-Apply ALL four frameworks to each page. Use `references/frameworks.md` for detailed criteria.
+Apply ALL four frameworks to each page. Use `references/frameworks.md` for detailed criteria and `references/page_criteria.md` for page-specific visual inspection checklists. Every framework finding must be grounded in what's visible in the screenshots AND in the site context from Phase 0B — not generic observations.
 
 ### 3A — 4Ps Analysis
 
@@ -286,6 +683,94 @@ Score each heuristic 0–3:
 8. Minimalist design (no clutter, visual hierarchy)
 9. Error recovery (helpful messages, clear next steps)
 10. Help & documentation (FAQ, chat, return policy accessibility)
+
+---
+
+### 3E — Checkout Form Deep Dive
+
+**Invoke the `form-cro` skill** cuando se cumpla cualquiera de estas condiciones:
+- El checkout tiene > 5 campos visibles en Step 1
+- Hay callouts `CO-FORM-*` generados en Phase 1C
+- GA4 muestra drop-off en Checkout Step 1 > 40%
+- La tasa de abandono TN > 75%
+
+El `form-cro` skill aplica su framework completo de optimización de formularios al checkout. Instrucciones para el skill:
+
+> "Analizar el formulario de checkout de [URL del checkout]. Es un checkout de e-commerce con objetivo de maximizar la tasa de completado (benchmark: 50–70%). Evaluar: conteo y necesidad de cada campo, secuencia de campos, labels y placeholders, validación inline, soporte de autofill, comportamiento en mobile (keyboards, tap targets), manejo de errores, y presencia de friction cognitivo. El usuario objetivo es [audience del site context]. El ticket promedio es [avg_price de site context]."
+
+Del output de `form-cro`, extraer y adaptar al contexto del audit:
+
+**FORM-1 — Inventario de campos**
+
+Para cada campo en el checkout, evaluar:
+
+| Campo | ¿Necesario para completar la venta? | ¿Se puede obtener después? | ¿Se puede eliminar o combinar? |
+|-------|-------------------------------------|---------------------------|-------------------------------|
+| Nombre | Sí | No | Combinar en 1 campo (no separar nombre/apellido) |
+| Email | Sí | No | Primero — captura lead aunque abandone |
+| Teléfono | Depende del envío | A veces | Hacer opcional si shipping no lo requiere |
+| Empresa | Casi nunca | Sí | Eliminar de default (agregar "¿es para empresa?" toggle) |
+| DNI/CUIT | Depende del país | Facturación | Mover a step de facturación, no en shipping |
+
+**Regla del skill form-cro que siempre aplica:**
+- 3 campos: baseline de completado
+- 4–6 campos: -10–25% de completado
+- 7+ campos: -25–50%+ de completado
+- Cada campo innecesario es revenue perdido
+
+**FORM-2 — Análisis de secuencia**
+
+El orden óptimo de campos en checkout e-commerce:
+1. Email (primero — captura el lead aunque abandone)
+2. Nombre completo (1 campo, no 2)
+3. Dirección (con autocomplete de Google Places si está disponible)
+4. Ciudad / Código postal (autocomplete desde CP)
+5. Método de envío
+6. → Siguiente paso: datos de pago
+
+Flags de secuencia incorrecta que buscar:
+- Nombre/Apellido como 2 campos separados → combinar
+- DNI en step de envío → mover a facturación
+- Teléfono obligatorio sin justificación → hacer opcional
+- Contraseña requerida antes del pago → ofrecer guest checkout primero
+- Selector de país con 200 opciones y sin default al país del sitio → UX problema
+
+**FORM-3 — Mobile form UX**
+
+En el screenshot mobile del checkout (ya capturado en Phase 1A):
+- ¿El teclado numérico aparece para campos de número/tarjeta/CP? (`inputmode="numeric"`)
+- ¿Los campos tienen el `type` correcto? (`type="email"`, `type="tel"`, `type="number"`)
+- ¿Los tap targets de labels y selects son ≥ 48px de alto?
+- ¿Los campos tienen `autocomplete` attributes? (`autocomplete="given-name"`, `autocomplete="email"`, etc.)
+- ¿Los errores de validación son visibles sin scroll? (errores inline, no solo al submit)
+
+**FORM-4 — Friction cognitivo**
+
+- ¿Hay campos con placeholder text como única label? (desaparece al tipear → el usuario olvida qué ponía)
+- ¿Los mensajes de error dicen qué hacer? ("Ingresá un email válido" ✅ vs. "Email inválido" ❌)
+- ¿El botón de submit indica qué va a pasar? ("Ir al pago" ✅ vs. "Continuar" ❌)
+- ¿Hay indicador de paso? ("Paso 1 de 3") o el usuario no sabe cuánto falta
+- ¿Los campos obligatorios están marcados consistentemente? (no mezclar asterisco rojo con texto "(requerido)")
+
+**Output de 3E:** Agregar a `cro_analysis_checkout.json` una sección `"form_audit"`:
+```json
+"form_audit": {
+  "total_fields_step1": 9,
+  "removable_fields": ["Apellido (combinar con Nombre)", "Empresa", "DNI (mover a facturación)"],
+  "fields_after_optimization": 6,
+  "estimated_completion_uplift": "+15–25%",
+  "mobile_keyboard_correct": false,
+  "autocomplete_attributes": false,
+  "guest_checkout_visible": true,
+  "error_messages_actionable": false,
+  "form_cro_score": 42,
+  "critical_fixes": [
+    "CO-FORM-01: 9 campos en Step 1 — benchmark: máximo 6. Eliminar Empresa y combinar Nombre+Apellido → +15% completado estimado.",
+    "CO-FORM-02: Sin atributos autocomplete — los browsers no pueden pre-llenar. Checkout time promedio +45 segundos en mobile.",
+    "CO-FORM-03: Mensajes de error no accionables ('Campo inválido' sin especificar qué corregir) — genera loops de frustración."
+  ]
+}
+```
 
 ---
 
@@ -1044,13 +1529,21 @@ For each page (Home → PLP → PDP → Cart → Checkout):
 - **Alertas de atribución**: lista de discrepancias detectadas con severidad, impacto en $ y acción recomendada
 - Si hay solo GA4 sin paid o sin TN → mostrar las secciones disponibles y documentar los gaps
 
+**Page 6 — Priority Matrix & Recommendations**
+- Impact × Effort 2×2 SVG matrix with dots (color = priority)
+- Recommendation cards (2-column grid): title, page tag, typed callout ID, framework tag, issue, exact fix, expected impact, effort estimate
+
 **Page 7 — A/B Test Plan**
 - Tabla resumen de 3–5 tests priorizados por impacto × esfuerzo
 - Ficha completa por test: hipótesis, control, variante, métrica primaria, cálculo de muestra, duración, herramienta
 
-**Page 6 — Priority Matrix & Recommendations**
-- Impact × Effort 2×2 SVG matrix with dots (color = priority)
-- Recommendation cards (2-column grid): title, page tag, framework tag, issue, exact fix, expected impact, effort estimate
+**Page 8 — App Stack Recommendations** *(TiendaNube — solo si aplica la plataforma)*
+- Stack actual detectado: lista de herramientas identificadas en el HTML del sitio
+- Tabla de recomendaciones priorizadas: App / Gap que resuelve (con callout ID) / Impacto esperado / Costo mensual / Esfuerzo de instalación / Prioridad semáforo
+- Cards individuales por app recomendada (máx 5): nombre + logo + razón específica del porqué (citando hallazgo del audit) + acción inmediata + ROI estimado
+- Categorías cubiertas en el análisis: Reviews · Carrito Abandonado · Urgencia/Escasez · Chat/WhatsApp · Búsqueda · Loyalty · Captura de Leads · Upsell/Cross-sell · Pagos LATAM
+- Estimación de revenue recuperable total si se implementan las 3 apps de mayor impacto
+- Nota: para sitios no-TiendaNube, esta página adapta las recomendaciones al ecosistema de la plataforma detectada (Shopify App Store, WooCommerce plugins, etc.)
 
 ### Data contract for analysis JSON files
 
@@ -1063,13 +1556,13 @@ Each `cro_analysis_<page>.json` must include these keys for the report to be ric
   "issues": ["🔴 No social proof above fold", "🟡 CTA below fold on mobile"],
   "strengths": ["✅ Price anchoring visible"],
   "callouts": [
-    "1. CTA button is below the fold — not visible without scrolling",
-    "2. No trust badges near price — missing SSL, payment logos",
-    "3. Reviews section is absent above the fold"
+    "PDP-CTA-01: El botón 'Agregar al carrito' está debajo del fold en mobile — el usuario debe hacer scroll para encontrarlo. Para este producto de $89, perder visibilidad del CTA en la primera pantalla representa una pérdida directa de ATC rate.",
+    "PDP-TRUST-01: No hay badges de pago ni sello de seguridad visibles cerca del precio. Este ticket promedio ($89) requiere señales de confianza explícitas en el punto de decisión.",
+    "PDP-SOCIAL-01: La sección de reviews aparece al final del scroll — solo 3 opiniones visibles en total. Para skincare premium, la prueba social es el principal driver de conversión y debe estar cerca del ATC."
   ],
   "callout_markers": [
     {
-      "n": 1,
+      "id": "PDP-CTA-01",
       "x": 28,
       "y": 62,
       "priority": "critical",
@@ -1079,13 +1572,13 @@ Each `cro_analysis_<page>.json` must include these keys for the report to be ric
       "box_h": 14
     },
     {
-      "n": 2,
+      "id": "PDP-TRUST-01",
       "x": 72,
       "y": 48,
       "priority": "warning"
     },
     {
-      "n": 3,
+      "id": "PDP-SOCIAL-01",
       "x": 50,
       "y": 78,
       "priority": "critical",
@@ -1095,6 +1588,7 @@ Each `cro_analysis_<page>.json` must include these keys for the report to be ric
       "box_h": 10
     }
   ],
+  "flow_issues": [],
   "aida": { "attention": 18, "interest": 14, "desire": 10, "action": 8 },
   "cialdini": { "social_proof": 1, "urgency": 0, "scarcity": 1, "authority": 2, "reciprocity": 1, "commitment": 0, "liking": 2 },
   "nielsen": { "h1": 2, "h2": 3, "h3": 1, "h4": 2, "h5": 1, "h6": 2, "h7": 2, "h8": 1, "h9": 1, "h10": 2 },
@@ -1161,6 +1655,34 @@ Each `cro_ga4_data.json` must include:
 ```
 
 Screenshot files must be named `screenshot_<page>_desktop.png` and `screenshot_<page>_mobile.png` and placed in the same analysis directory. The report embeds them as base64 — no external links.
+
+### Visual Mockups de las 3 recomendaciones críticas
+
+**Invoke the `generate-image` skill** para generar un mockup visual del fix recomendado para los **3 hallazgos con mayor impacto en CVR**. Esta es la diferencia entre un reporte que el cliente lee y uno que el cliente implementa.
+
+Para cada uno de los 3 fixes críticos (los de mayor `impact_score` en el JSON de recommendations):
+
+1. **Describir el estado actual** (extraído del screenshot existente): qué hay ahora y cuál es el problema visual
+2. **Describir el fix exacto** en términos visuales: dónde va el elemento, qué tamaño, qué color, qué texto
+3. **Invocar `generate-image`** con un prompt específico:
+
+```
+/generate-image "E-commerce product page [home/PDP/cart/checkout] mockup. 
+Style: [brand_personality del site context — ej: 'clean, minimal, natural skincare brand'].
+Show: [descripción exacta del fix — ej: 'Large green Add to Cart button above the fold, 
+visible without scrolling, with trust badges (SSL lock, 30-day returns, free shipping) 
+directly below it. Product price in bold above the button. Star rating with review count 
+near the product title.']. 
+Color palette: [colores del brand extraídos de los screenshots]. 
+Platform: mobile viewport 390px wide."
+```
+
+4. Guardar el mockup generado como `mockup_fix_<n>_<page>.png`
+5. Incluirlo en la **Page 6 (Recommendations)** del reporte junto con la recomendación correspondiente — sección "Así quedaría el fix"
+
+**Qué no hacer:** no generar mockups para fixes de texto, datos, o configuraciones — solo para cambios visuales donde mostrar es más claro que describir (posición de botones, layout de secciones, trust badges, hero redesign).
+
+**Si `generate-image` falla o no está disponible:** continuar sin mockups — son un enhancement, no un bloqueante del reporte.
 
 ---
 
@@ -1234,6 +1756,122 @@ Entrega en formato tabla resumen + fichas individuales:
 | 1 | ... | ... | ... | ... | ... | ... |
 
 Seguida de ficha completa para cada test con todos los campos obligatorios.
+
+### Copy Variants con `content-creator`
+
+**Invoke the `content-creator` skill** para todos los tests que involucren copy — headlines, CTAs, descripciones de producto, subject lines de email. En lugar de solo definir la hipótesis, entregar las variantes reales listas para implementar.
+
+**Cuándo activar:** cuando un test incluye `"tipo": "copy"` o el elemento a testear es un texto (headline, CTA button text, product description opening, email subject).
+
+**Flujo de invocación:**
+
+1. Pasar al skill el brand voice extraído en Phase 0B (`brand_personality`, `primary_vp_quote`, `audience`)
+2. Describir el elemento actual a mejorar (el texto existente, su contexto, por qué no convierte)
+3. Pedir 3 variantes optimizadas para conversión, alineadas al brand voice
+
+Ejemplo de instrucción al skill:
+```
+/content-creator
+Brand: [brand extraído de site context — ej: "skincare natural, tono cálido y cercano, audiencia mujeres 28-42"]
+Elemento actual: Headline del hero → "Bienvenidos a nuestra tienda"
+Problema: No comunica qué se vende ni para quién. Alta tasa de bounce en home (68%).
+Objetivo: 3 variantes de headline para A/B test. Cada una debe comunicar la propuesta 
+de valor en < 8 palabras, hablarle directamente a la audiencia, y tener una promesa clara.
+Optimizar para: primera impresión (< 2 segundos de lectura).
+```
+
+**Output esperado por test de copy:**
+```
+TEST #2 — Hero Headline (copy variant)
+
+Control (A): "Bienvenidos a nuestra tienda"
+Variante (B): "Skincare natural que tu piel merece"     ← generado por content-creator
+Variante (C): "Ingredientes reales. Resultados reales." ← generado por content-creator
+Variante (D): "Para pieles que merecen lo mejor"        ← generado por content-creator
+
+Metodología: testear B vs. A primero (mayor cambio). Si B gana, testear C vs. B.
+Métrica primaria: bounce rate en home / sesiones que llegan a PDP desde home
+```
+
+Si el test no involucra copy → saltear esta invocación. No usar `content-creator` para generar copy de formularios, datos técnicos, o información de producto que requiere conocimiento específico del cliente.
+
+---
+
+## PHASE 8: TiendaNube App Stack Recommendations
+
+Esta fase genera recomendaciones **diagnósticas y priorizadas** de apps para TiendaNube. No es una lista genérica — cada app recomendada está activada por un hallazgo específico del audit y lleva la cita del callout ID o la métrica que la justifica.
+
+**Solo ejecutar esta fase si el sitio es TiendaNube** (detectado en Phase 0). Para otras plataformas (Shopify, WooCommerce, VTEX) adaptar con las apps equivalentes de cada ecosistema.
+
+Usa `references/tiendanube_plugins.md` como base de datos completa. Aquí están las reglas de ejecución.
+
+---
+
+### PLUG-0 — Verificación de stack actual
+
+Antes de recomendar, verificar qué ya tienen instalado. Analizar desde el HTML (Phase 2) y los screenshots:
+
+- ¿Hay scripts de email marketing activos? (Klaviyo, Mailchimp, Perfit — visible en `<head>` del HTML)
+- ¿Hay widget de reviews en PDP? (Judge.me, Stamped, Yotpo, nativo TN)
+- ¿Hay botón de WhatsApp visible?
+- ¿Hay chat widget activo?
+- ¿Hay pop-up de captura de email?
+- ¿Hay programa de loyalty visible?
+- ¿Hay countdown timer o scarcity widgets activos?
+
+Documentar el stack actual en `cro_plugins.json` bajo `"current_stack": [...]`. No recomendar lo que ya tienen.
+
+---
+
+### PLUG-1 — Diagnóstico por gap
+
+Mapear los hallazgos del audit a los gaps de app:
+
+| Condición del audit | Gap identificado | Categoría de app |
+|---------------------|-----------------|------------------|
+| `cialdini.social_proof < 2` en PDP | Sin reviews o reviews insuficientes | Reviews |
+| Callout `PDP-SOCIAL-*` presente | Reviews no visibles o fuera de fold | Reviews |
+| `tn_abandoned_rate > 70%` o revenue perdido significativo | Sin automatización de recuperación | Carrito abandonado |
+| GA4 drop ATC→Checkout > 60% | Fricción pre-checkout sin nurturing | Email automation |
+| `cialdini.urgency < 1` Y `cialdini.scarcity < 1` | Sin señales de urgencia/escasez | Urgency widgets |
+| Callout `HOME-NAV-*` sobre search | Buscador ausente o deficiente | Búsqueda IA |
+| Nielsen H10 < 2 o callout `CO-TRUST-*` | Sin soporte pre-compra accesible | WhatsApp / Chat |
+| Sin email capture en home | Lista de leads no se construye | Pop-up captura |
+| Recompra < 20% (BI #6) | Sin fidelización activa | Loyalty |
+| AOV bajo para categoría, sin cross-sell | Ticket promedio sin optimizar | Bundles / upsell |
+| Callout `CO-PAYMENT-*` | Métodos de pago locales faltantes | Pagos LATAM |
+| Sin precio en cuotas visible en PDP | Barrera percibida de precio | MercadoPago cuotas |
+
+---
+
+### PLUG-2 — Generación de recomendaciones priorizadas
+
+Con el mapa de gaps, generar un shortlist de **máximo 5 apps** ordenadas por ROI × velocidad de impacto. Nunca recomendar más de 5 — demasiadas opciones paralizan.
+
+Para cada app recomendada:
+1. **Cita el callout ID o la métrica exacta** que activó la recomendación
+2. **Calcula el impacto en $** si tenés datos de TN (revenue perdido en abandono, ATC rate, ticket promedio)
+3. **Especifica las acciones inmediatas** — no solo "instalar X", sino qué configurar primero
+
+**Reglas de priorización:**
+- Perfit de carrito abandonado: SIEMPRE primera si hay abandono significativo y no tienen email automation
+- Judge.me de reviews: segunda prioridad si social proof score < 2 en PDP
+- WhatsApp button: tercera si no está visible y el ticket promedio > $30 USD
+- El resto según el gap más crítico detectado en el audit
+
+**Cuotas/installments para LATAM:** Si el audit es de una tienda argentina o latinoamericana con ticket > $50 USD, verificar si se muestra el precio en cuotas en el PDP. Si no → es una recomendación urgente aunque no haya una "app" específica (puede ser configuración nativa de MercadoPago en TN).
+
+---
+
+### PLUG-3 — Output
+
+Guardar en `cro_plugins.json` con el contrato definido en `references/tiendanube_plugins.md`.
+
+Incluir en el reporte HTML (Page 8):
+- Lista de apps del stack actual detectado
+- Tabla de recomendaciones priorizadas: App / Gap que resuelve / Impacto esperado / Costo / Esfuerzo / Prioridad
+- Para cada app recomendada: card con nombre, razón específica (citando el hallazgo), acción inmediata, costo estimado, ROI esperado
+- Estimación de revenue adicional total si se implementan las 3 principales apps recomendadas
 
 ---
 

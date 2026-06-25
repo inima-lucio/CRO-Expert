@@ -9,13 +9,17 @@ Built by [Lucio Monopoli](mailto:inima.lucio@gmail.com) · [INIMA Interactive](h
 
 Run `/cro-expert https://your-store.com` in Claude Code and get a **professional HTML/PDF audit report** covering:
 
-- Viewport screenshots (desktop + mobile) with **numbered callout markers** overlaid above the fold
+- **Site context extraction** — before analysis, extracts brand identity, price tier, audience, and active promotions to make every finding store-specific (no more generic audits)
+- **UX/UI expert screenshot analysis** — invokes the `ui-ux-designer` skill on each viewport screenshot for expert visual hierarchy, contrast, fold line, and thumb zone evaluation
+- **Typed callout IDs** — every finding has a traceable ID (`HOME-HERO-01`, `PDP-CTA-01`, `CART-TRUST-01`, `CO-FORM-01`) so issues are instantly located in the screenshot and report
+- **Cross-page flow analysis** — evaluates HOME→PDP→CART→CHECKOUT transitions: message match, price surprises, trust continuity, and promotion consistency across the funnel
 - 4Ps · AIDA · Cialdini · Nielsen framework analysis
 - Real GA4 funnel data — auto-discovered by domain, no property ID needed
 - Google Ads — ROAS, CPA, CVR by device, landing page quality score per keyword
 - Meta Ads (Facebook + Instagram) — ROAS, CPA, paid funnel by campaign and platform
 - TiendaNube — real orders, abandoned carts, UTM attribution per order, top products
 - **Section 5B — Multi-source triangulation** — cross-references all sources to detect double attribution, real vs. claimed ROAS, and mobile CVR gaps
+- **TiendaNube App Stack recommendations** — diagnostic plugin recommendations (Perfit, Judge.me, WhatsApp, Doofinder, Smile.io, urgency tools) triggered by specific audit findings, with ROI estimates and installation time
 - Priority matrix with Impact × Effort recommendations
 - A/B test plan with sample size calculations
 - Client-ready conclusions + 30-day action checklist
@@ -269,14 +273,15 @@ The skill is designed to add new data sources without changing the core audit lo
 |---|---|---|
 | Cover | Portada | CRO score gauge (traffic light) + 4 KPI chips |
 | 1 | Executive Summary | Score per page + critical issues list + 30/60/90 day roadmap |
-| 2 | Page Analysis | Viewport screenshots with numbered visual markers + fold line + AIDA chart |
+| 2 | Page Analysis | Viewport screenshots with **typed callout IDs** (HOME-HERO-01, PDP-CTA-01…) + UX/UI expert findings + fold line + AIDA chart |
+| 2B | Flow Analysis | HOME→PDP→CART→CHECKOUT transition audit + cross-funnel consistency table |
 | 3 | Framework Audit | Cialdini 7 principles + Nielsen 10 heuristics |
 | 4 | Data Dashboard | GA4 funnel + platform e-commerce data |
 | 5 | Paid Media | Google Ads + Meta Ads + ad vs. landing diagnosis |
-| 5B | Multi-source triangulation | Sessions by channel · Engagement by channel · CVR device gap · Organic vs. paid comparison |
-| 6 | Recommendations | Impact × Effort matrix + recommendation cards |
+| 5B | Multi-source triangulation | Revenue validation · Channel efficiency matrix · CVR device gap · Unified funnel |
+| 6 | Recommendations | Impact × Effort matrix + recommendation cards (with callout ID reference) |
 | 7 | A/B Test Plan | Summary table + full test specs with sample size calculations |
-| 8 | Plugins | CRO tools ranked by conversion impact |
+| 8 | App Stack | Diagnostic TiendaNube plugin recommendations triggered by audit findings (Perfit · Judge.me · WhatsApp · Doofinder · Smile.io · más) with ROI estimates |
 | 9 | Action Plan | Conclusions + 30-day checklist + KPIs to track |
 
 ---
